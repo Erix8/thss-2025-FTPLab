@@ -1,0 +1,54 @@
+# 一、编译产物（核心忽略项）
+# 可执行文件（服务器/客户端）
+ftp_server
+ftp_client
+# 目标文件（.o）
+*.o
+# 动态/静态库（若后续引入）
+*.a
+*.so
+*.dylib
+
+# 二、XCode 相关文件
+# 项目配置
+*.xcodeproj/
+*.xcworkspace/
+# 编译缓存
+DerivedData/
+# 用户配置（包含本地路径等）
+*.xcuserstate
+*.xcuserdata
+# 断点配置
+*.xctestplan
+*.xcscheme
+
+# 三、C 语言开发临时文件
+# 预处理文件
+*.i
+*.ii
+*.s
+# 编译过程中的临时文件
+*.gch
+# 自动生成的依赖文件（Makefile 可能生成）
+*.d
+
+# 四、系统/编辑器临时文件
+# macOS 系统文件
+.DS_Store
+# Linux 系统文件
+*~
+# Vim 临时文件
+.*.swp
+.*.swo
+# VS Code 配置（若使用）
+.vscode/
+*.code-workspace
+
+# 五、FTP 运行时数据（如根目录下的测试文件）
+# 注意：若 ftp_root 是代码仓库内的空目录，可创建 ftp_root/.gitkeep 保留目录结构
+ftp_root/*
+!ftp_root/.gitkeep  # 例外：保留 .gitkeep 以确保目录被跟踪
+
+# 六、日志/配置文件（若运行时生成）
+*.log
+*.conf
