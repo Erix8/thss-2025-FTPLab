@@ -161,7 +161,7 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     const char *cmd_start = p;
     while (*p != ' ' && *p != '\0')
         p++;
-    size_t cmd_len = p - cmd_start;
+    cmd_len = p - cmd_start;
     // 命令转为大写并复制（限制最大长度15，留一个字节给终止符）
     if (cmd_len > CMD_MAX_LEN)
         cmd_len = CMD_MAX_LEN;

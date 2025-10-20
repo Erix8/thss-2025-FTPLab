@@ -1,6 +1,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <stddef.h>
+
 /**
  * 拼接根目录与相对路径，生成安全的绝对路径（防止路径越权）
  * @param root 根目录路径（如"/ftp_root"）
