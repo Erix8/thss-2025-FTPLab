@@ -1,6 +1,7 @@
 #include "net/client_socket.h"
 #include "ui/ui_utils.h"
 #include "cmd/client_cmds.h"
+#include <stdlib.h>
 
 int main(int argc, char *argv[])
 {
