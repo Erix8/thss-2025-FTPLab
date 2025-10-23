@@ -9,7 +9,7 @@
  * @param result 输出拼接后的绝对路径缓冲区（需足够大）
  * @return 指向result的指针，失败返回NULL
  */
-char *utils_join_path(const char *root, const char *relative, char *result)
+char *utils_join_path(const char *root, const char *relative, char *result, size_t result_len)
 {
     return NULL;
 }
@@ -31,7 +31,7 @@ int utils_check_path(const char *root, const char *target)
  * @param cmd 输出命令缓冲区（至少16字节）
  * @param args 输出参数缓冲区（至少1024字节）
  */
-void utils_split_cmd(const char *cmd_line, char *cmd, char *args)
+void utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args, size_t args_len)
 {
     if (!cmd_line || !cmd || !args)
         return;

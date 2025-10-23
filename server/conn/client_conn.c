@@ -35,7 +35,7 @@ void handle_client(ClientConn *conn)
 
         // 分割命令和参数
         char cmd[16], args[1024];
-        utils_split_cmd(buf, cmd, args);
+        utils_split_cmd(buf, cmd, sizeof(cmd), args, sizeof(args));
 
         // 处理命令
         if (strcmp(cmd, "USER") == 0)
