@@ -29,9 +29,12 @@ int utils_check_path(const char *root, const char *target)
  * 分割命令行字符串为命令和参数
  * @param cmd_line 完整命令行（如"RETR file.txt"）
  * @param cmd 输出命令缓冲区（至少16字节）
+ * @param cmd_len 输出命令缓冲区长度
  * @param args 输出参数缓冲区（至少1024字节）
+ * @param args_len 输出参数缓冲区长度
+ * @return 0：成功；-1：参数无效或缓冲区不足；-2：空命令
  */
-void utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args, size_t args_len)
+int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args, size_t args_len)
 {
     if (!cmd_line || !cmd || !args)
         return;
