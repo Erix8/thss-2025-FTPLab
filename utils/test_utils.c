@@ -1,17 +1,47 @@
 #include "utils.h"
+#include "utils.c"
 #include <limits.h> // 用于 PATH_MAX
+#include <stdio.h>
+#include <string.h>
+
+void test_utils_split_cmd()
+{
+    char cmd[16];
+    char args[1024];
+    const char *input;
+    // test case 1
+    memset(cmd, 0, sizeof(cmd));
+    memset(args, 0, sizeof(args));
+    input = "USER test";
+    printf("Return value: %d; Command: '%s'; Args: '%s'\n",
+           utils_split_cmd(input, cmd, sizeof(cmd), args, sizeof(args)), cmd, args);
+    // test case 2
+    memset(cmd, 0, sizeof(cmd));
+    memset(args, 0, sizeof(args));
+    input = "   PASS  mypassword  ";
+    printf("Return value: %d; Command: '%s'; Args: '%s'\n",
+           utils_split_cmd(input, cmd, sizeof(cmd), args, sizeof(args)), cmd, args);
+    // test case 3
+    memset(cmd, 0, sizeof(cmd));
+    memset(args, 0, sizeof(args));
+    input = "QUIT";
+    printf("Return value: %d; Command: '%s'; Args: '%s'\n",
+           utils_split_cmd(input, cmd, sizeof(cmd), args, sizeof(args)), cmd, args);
+    // test case 4
+    memset(cmd, 0, sizeof(cmd));
+    memset(args, 0, sizeof(args));
+    input = "HELP";
+    printf("Return value: %d; Command: '%s'; Args: '%s'\n",
+           utils_split_cmd(input, cmd, 0, args, sizeof(args)), cmd, args);
+    // test case 5
+    memset(cmd, 0, sizeof(cmd));
+    memset(args, 0, sizeof(args));
+    input = "   ";
+    printf("Return value: %d; Command: '%s'; Args: '%s'\n",
+           utils_split_cmd(input, cmd, sizeof(cmd), args, sizeof(args)), cmd, args);
+}
 
 int main()
 {
-    // 声明缓冲区
-    char result[PATH_MAX];
-    char cmd[16];
-    char args[1024];
-
-    // 调用三个函数（参数仅为编译检查，无实际意义）
-    utils_join_path("/root", "file", result, PATH_MAX);
-    utils_check_path("/root", "/root/file");
-    utils_split_cmd("GET file.txt", cmd, 16, args, 1024);
-
     return 0;
 }

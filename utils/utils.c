@@ -136,6 +136,10 @@ int utils_check_path(const char *root, const char *target)
  */
 int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args, size_t args_len)
 {
+    // 初始化输出缓冲区
+    memset(cmd, 0, cmd_len);
+    memset(args, 0, args_len);
+
     // 检验参数是否合格
     if (cmd_line == NULL || cmd == NULL || args == NULL)
     {
@@ -145,10 +149,6 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     {
         return -1; // 缓冲区大小不足
     }
-
-    // 初始化输出缓冲区
-    memset(cmd, 0, cmd_len);
-    memset(args, 0, args_len);
 
     // 跳过前导空格
     const char *p = cmd_line;
@@ -168,16 +168,19 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     for (size_t i = 0; i < cmd_len; i++)
     {
         char c = cmd_start[i];
+        // printf("%c\n", c);
         cmd[i] = (c >= 'a' && c <= 'z') ? (c - 32) : c;
     }
     cmd[cmd_len] = '\0';
+    // printf("cmd: %s\n", cmd);
 
     // 提取参数（剩余部分，跳过中间空格）
     while (*p == ' ')
         p++;
     // 限制参数最大长度1023，留一个字节给终止符
     strncpy(args, p, args_len - 1);
-    args[args_len] = '\0';
+    args[args_len - 1] = '\0';
+    // printf("args: %s\n", args);
 
     return 0;
 }
