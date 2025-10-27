@@ -51,3 +51,43 @@ git merge client
 # 解决可能的冲突（如 utils 函数的调用方式差异）
 git commit -m "merge all modules: complete ftp server/client"
 ```
+
+### 编译命令
+
+#### 编译服务器
+
+```bash
+gcc -o ftp_server \
+    server/main.c \
+    server/config/config.c \
+    server/net/socket_utils.c \
+    server/conn/client_conn.c \
+    utils/utils.c \
+    -Iserver/config -Iserver/net -Iserver/conn -Iutils
+```
+
+#### 编译客户端
+
+```bash
+gcc -o ftp_client \
+    client/main.c \
+    client/net/client_socket.c \
+    client/cmd/client_cmds.c \
+    client/ui/ui_utils.c \
+    utils/utils.c \
+    -Iclient/net -Iclient/cmd -Iclient/ui -Iutils
+```
+
+###  运行测试
+
+#### 启动服务器
+
+```bash
+./ftp_server -p 2121  # 使用2121端口
+```
+
+#### 启动客户端（新终端）
+
+```bash
+./ftp_client 127.0.0.1 2121  # 连接本地服务器
+```
