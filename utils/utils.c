@@ -4,7 +4,7 @@
 #include <limits.h>
 #include <ctype.h>
 #define CMD_MAX_LEN 16
-#define ARGS_MAX_LEN 1024
+#define ARGS_MAX_LEN 10
 
 /**
  * 拼接根目录与相对路径，生成安全的绝对路径（防止路径越权）
@@ -162,14 +162,16 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     while (*p != ' ' && *p != '\0')
         p++;
     cmd_len = p - cmd_start;
+    // printf("cmd_len:%d\n", (int)cmd_len);
     // 命令转为大写并复制（限制最大长度15，留一个字节给终止符）
-    if (cmd_len > CMD_MAX_LEN)
-        cmd_len = CMD_MAX_LEN;
+    if (cmd_len > CMD_MAX_LEN - 1)
+        cmd_len = CMD_MAX_LEN - 1;
+
     for (size_t i = 0; i < cmd_len; i++)
     {
-        char c = cmd_start[i];
-        // printf("%c\n", c);
-        cmd[i] = (c >= 'a' && c <= 'z') ? (c - 32) : c;
+        unsigned char c = (unsigned char)cmd_start[i];
+        cmd[i] = (char)toupper(c);
+        // printf("cmd[%d]:%c\n", (int)i, cmd[i]);
     }
     cmd[cmd_len] = '\0';
     // printf("cmd: %s\n", cmd);
@@ -178,6 +180,7 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     while (*p == ' ')
         p++;
     // 限制参数最大长度1023，留一个字节给终止符
+    // printf("args_len:%d\n", (int)args_len);
     strncpy(args, p, args_len - 1);
     args[args_len - 1] = '\0';
     // printf("args: %s\n", args);
