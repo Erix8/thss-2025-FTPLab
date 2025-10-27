@@ -22,7 +22,7 @@ char *utils_join_path(const char *root, const char *relative, char *result, size
 
     // 临时缓冲区存储拼接后的原始路径
     char temp[PATH_MAX];
-    if (snprintf(temp, sizeof(temp), "%s/%s", root, relative) >= sizeof(temp))
+    if (snprintf(temp, sizeof(temp), "%s/%s", root, relative) >= (int)sizeof(temp))
         return NULL; // 路径过长
 
     // 规范化路径（处理.和..）
@@ -31,18 +31,19 @@ char *utils_join_path(const char *root, const char *relative, char *result, size
     char *q = normalized;
     char *start = normalized;
 
+    *q++ = '/';
+    while (*p == '/')
+        p++;
+
     while (*p)
     {
-        // 跳过连续斜杠
         while (*p == '/')
             p++;
-
         // 到达temp结尾
         if (!*p)
             break;
 
         // 处理当前目录.
-        // TODO:如果p+1超出缓冲区代码会不会不安全？
         if (*p == '.' && (*(p + 1) == '\0' || *(p + 1) == '/'))
         {
             p += (*(p + 1) == '/') ? 2 : 1;
@@ -52,27 +53,29 @@ char *utils_join_path(const char *root, const char *relative, char *result, size
         // 处理上级目录..
         if (*p == '.' && *(p + 1) != '\0' && *(p + 1) == '.' && (*(p + 2) == '\0' || *(p + 2) == '/'))
         {
-            // 不能回退到根目录之外
-            if (q > start)
+            // 如果已经在 root（仅有开头的 '/'），则越权
+            if (q == start + 1)
             {
-                // 回退到上一个目录
-                q--;
-                while (q > start && *q != '/')
-                    q--;
+                return NULL; // 越权，拒绝
             }
+            // 回退到上一个目录分隔符
+            q--;
+            while (q > start + 1 && *q != '/')
+                q--;
             p += (*(p + 2) == '/') ? 3 : 2;
             continue;
         }
 
         // 复制当前目录名
-        if (q != start)
+        if (q != start + 1)
             *q++ = '/';
         while (*p && *p != '/')
         {
+            if ((size_t)(q - start) >= (PATH_MAX - 1))
+                return NULL; // 太长
             *q++ = *p++;
         }
     }
-    *q = '\0';
 
     // 移除末尾多余斜杠（根目录"/"除外），首部斜杠需要保留
     if (q > start + 1 && *(q - 1) == '/')
@@ -136,9 +139,6 @@ int utils_check_path(const char *root, const char *target)
  */
 int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args, size_t args_len)
 {
-    // 初始化输出缓冲区
-    memset(cmd, 0, cmd_len);
-    memset(args, 0, args_len);
 
     // 检验参数是否合格
     if (cmd_line == NULL || cmd == NULL || args == NULL)
@@ -149,6 +149,10 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     {
         return -1; // 缓冲区大小不足
     }
+
+    // 初始化输出缓冲区
+    memset(cmd, 0, cmd_len);
+    memset(args, 0, args_len);
 
     // 跳过前导空格
     const char *p = cmd_line;
@@ -162,7 +166,7 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     while (*p != ' ' && *p != '\0')
         p++;
     cmd_len = p - cmd_start;
-    // printf("cmd_len:%d\n", (int)cmd_len);
+
     // 命令转为大写并复制（限制最大长度15，留一个字节给终止符）
     if (cmd_len > CMD_MAX_LEN - 1)
         cmd_len = CMD_MAX_LEN - 1;
@@ -171,19 +175,15 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     {
         unsigned char c = (unsigned char)cmd_start[i];
         cmd[i] = (char)toupper(c);
-        // printf("cmd[%d]:%c\n", (int)i, cmd[i]);
     }
     cmd[cmd_len] = '\0';
-    // printf("cmd: %s\n", cmd);
 
     // 提取参数（剩余部分，跳过中间空格）
     while (*p == ' ')
         p++;
     // 限制参数最大长度1023，留一个字节给终止符
-    // printf("args_len:%d\n", (int)args_len);
     strncpy(args, p, args_len - 1);
     args[args_len - 1] = '\0';
-    // printf("args: %s\n", args);
 
     return 0;
 }
