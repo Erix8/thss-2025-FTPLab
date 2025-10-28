@@ -257,6 +257,8 @@ int handle_client_cmd(ClientConn *conn)
         return 0;
     }
 
+    // cmd_process(conn, cmd, args);
+
     if (strcmp(cmd, "USER") == 0)
     {
         socket_send(conn->ctrl_fd, "331 Please specify the password");
@@ -370,7 +372,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
                 continue;
             }
 
-            // 新增：立即检查 fd 是否可被 select 使用
+            // 立即检查 fd 是否可被 select 使用
             if (ctrl_fd < 0 || ctrl_fd >= FD_SETSIZE)
             {
                 // 不在 select 可接受范围内，拒绝连接并关闭

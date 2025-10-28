@@ -3,8 +3,16 @@
 
 #include "../conn/client_conn.h"
 
-// 处理客户端命令（返回FTP响应码，如220/230/550）
-int cmd_process(ClientConn *conn, const char *cmd_line);
+/**
+ * 处理客户端发送的命令行
+ * @param conn 客户端连接信息结构体指针
+ * @param cmd 客户端发送的命令字符串
+ * @param args 客户端发送的命令参数字符串
+ * @return FTP响应码
+ */
+int cmd_process(ClientConn *conn, const char *cmd, const char *args)
+{
+}
 
 // 以下为内部命令处理函数（仅在.c中实现，.h不暴露）
 // int cmd_handle_user(ClientConn* conn, const char* args);  // 处理USER命令
