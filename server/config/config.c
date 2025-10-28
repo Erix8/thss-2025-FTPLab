@@ -12,9 +12,9 @@
 void config_init(int argc, char *argv[], ServerConfig *config)
 {
     // 默认配置
-    config->port = 2121;                    // 默认端口2121
-    strcpy(config->root_dir, "./ftp_root"); // 默认根目录
-    config->max_conn = 10;                  // 默认最大连接数
+    config->port = 21;                // 默认端口21
+    strcpy(config->root_dir, "/tmp"); // 默认根目录
+    config->max_conn = 20;            // 默认最大连接数
 
     // 简单解析命令行参数（仅支持 -p 端口）
     for (int i = 1; i < argc; i++)
