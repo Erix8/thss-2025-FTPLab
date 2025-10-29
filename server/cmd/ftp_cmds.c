@@ -16,7 +16,13 @@ int cmd_process(ClientConn *conn, const char *cmd, const char *args)
 // int cmd_handle_pass(ClientConn* conn, const char* args);  // 处理PASS命令
 // int cmd_handle_port(ClientConn* conn, const char* args);  // 处理PORT命令
 // int cmd_handle_pasv(ClientConn* conn, const char* args);  // 处理PASV命令
-// int cmd_handle_retr(ClientConn* conn, const char* args);  // 处理RETR命令（下载）
-// int cmd_handle_stor(ClientConn* conn, const char* args);  // 处理STOR命令（上传）
-// int cmd_handle_cwd(ClientConn* conn, const char* args);   // 处理CWD命令（切换目录）
-// int cmd_handle_list(ClientConn* conn, const char* args);  // 处理LIST命令（列目录）
+// int cmd_handle_retr(ClientConn* conn, const char* args);  // 处理RETR命令
+// int cmd_handle_stor(ClientConn* conn, const char* args);  // 处理STOR命令
+// int cmd_handle_cwd(ClientConn* conn, const char* args);   // 处理CWD命令
+// int cmd_handle_pwd(ClientConn* conn, const char* args);   // 处理PWD命令
+// int cmd_handle_mkd(ClientConn* conn, const char* args);   // 处理MKD命令
+// int cmd_handle_rmd(ClientConn* conn, const char* args);   // 处理RMD命令
+// int cmd_handle_list(ClientConn* conn, const char* args);  // 处理LIST命令
+// int cmd_handle_syst(ClientConn* conn, const char* args);  // 处理SYST命令
+// int cmd_handle_type(ClientConn* conn, const char* args);  // 处理TYPE命令
+// int cmd_handle_quit(ClientConn* conn, const char* args);  // 处理QUIT命令
