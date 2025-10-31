@@ -1,6 +1,7 @@
 #include "client_conn.h"
 #include "../net/socket_utils.h"
 #include "../../utils/utils.h"
+#include "../cmd/ftp_cmds.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -249,7 +250,7 @@ int handle_client_cmd(ClientConn *conn)
         // 客户端断开连接（由conn_manager_run处理移除）
         return 1;
     }
-    // 解析并处理命令（简化版，后续对接cmd_process）
+    // 解析命令，若不合法返回500
     char cmd[16], args[1024];
     if (utils_split_cmd(buf, cmd, sizeof(cmd), args, sizeof(args)) != 0)
     {
@@ -257,27 +258,16 @@ int handle_client_cmd(ClientConn *conn)
         return 0;
     }
 
-    // cmd_process(conn, cmd, args);
-
-    if (strcmp(cmd, "USER") == 0)
-    {
-        socket_send(conn->ctrl_fd, "331 Please specify the password");
-        return 0;
-    }
-    else if (strcmp(cmd, "PASS") == 0)
-    {
-        conn->auth_state = AUTH_STATE_AUTHED;
-        socket_send(conn->ctrl_fd, "230 Login successful");
-        return 0;
-    }
-    else if (strcmp(cmd, "QUIT") == 0)
+    // 若为退出命令返回1，其余命令返回0
+    if (strcmp(cmd, "QUIT") == 0)
     {
         socket_send(conn->ctrl_fd, "221 Goodbye");
         return 1;
     }
     else
     {
-        socket_send(conn->ctrl_fd, "502 Command not implemented");
+        // 处理其他命令，返回对应信息
+        cmd_process(conn, cmd, args);
         return 0;
     }
 }
