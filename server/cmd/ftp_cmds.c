@@ -7,19 +7,20 @@ static void cmd_handle_user(ClientConn *conn, const char *args)
     // 检查是否已认证
     if (conn->auth_state == AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "503 Already logged in");
+        socket_send(conn->ctrl_fd, "503 Already logged in.\r\n");
         return;
     }
 
     // 验证用户名是否为anonymous
     if (args == NULL || strcmp(args, "anonymous") != 0)
     {
-        socket_send(conn->ctrl_fd, "530 Only anonymous login supported");
+        socket_send(conn->ctrl_fd, "530 Only anonymous login supported.\r\n");
         return;
     }
 
     // 接受匿名用户，提示输入密码(邮箱)
-    socket_send(conn->ctrl_fd, "331 Please specify the password (email address)");
+    conn->pending_user_anon = 1;
+    socket_send(conn->ctrl_fd, "331 Please specify the password (email address).\r\n");
     return;
 }
 
@@ -28,20 +29,27 @@ static void cmd_handle_pass(ClientConn *conn, const char *args)
     // 检查认证状态
     if (conn->auth_state == AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "503 Already logged in");
+        socket_send(conn->ctrl_fd, "230 Already logged in.\r\n");
         return;
     }
 
     // 简单验证密码不为空(实际匿名登录通常不严格验证邮箱格式)
+    if (!conn->pending_user_anon)
+    {
+        socket_send(conn->ctrl_fd, "503 Login with USER anonymous first.\r\n");
+        return;
+    }
+
     if (args == NULL || strlen(args) == 0)
     {
-        socket_send(conn->ctrl_fd, "501 Password required (email address)");
+        socket_send(conn->ctrl_fd, "501 Password required (email address).\r\n");
         return;
     }
 
     // 标记为已认证并发送成功消息
     conn->auth_state = AUTH_STATE_AUTHED;
-    socket_send(conn->ctrl_fd, "230 Login successful");
+    conn->pending_user_anon = 0;
+    socket_send(conn->ctrl_fd, "230 Login successful.\r\n");
     return;
 }
 
@@ -53,18 +61,42 @@ static void cmd_handle_pass(ClientConn *conn, const char *args)
  */
 void cmd_process(ClientConn *conn, const char *cmd, const char *args)
 {
-    if (strcmp(cmd, "USER") == 0)
+    if (!conn || !cmd)
     {
-        cmd_handle_user(conn, args);
+        if (conn)
+            socket_send(conn->ctrl_fd, "500 Internal error.\r\n");
+        return;
     }
-    else if (strcmp(cmd, "PASS") == 0)
+
+    // 阶段1：未登录，且未进入匿名流程 -> 仅允许 USER
+    if (conn->auth_state != AUTH_STATE_AUTHED && conn->pending_user_anon == 0)
     {
-        cmd_handle_pass(conn, args);
+        if (strcmp(cmd, "USER") == 0)
+        {
+            cmd_handle_user(conn, args);
+            return;
+        }
+        // 其他命令一律不合法
+        socket_send(conn->ctrl_fd, "530 Please login with USER anonymous.\r\n");
+        return;
     }
-    else
+
+    // 阶段2：已收到 USER anonymous，等待 PASS -> 仅允许 PASS
+    if (conn->auth_state != AUTH_STATE_AUTHED && conn->pending_user_anon == 1)
     {
-        socket_send(conn->ctrl_fd, "502 Command not implemented");
+        if (strcmp(cmd, "PASS") == 0)
+        {
+            cmd_handle_pass(conn, args);
+            return;
+        }
+        // USER 在该阶段关闭，始终提示 PASS 验证
+        socket_send(conn->ctrl_fd, "331 User accepted, send PASS (email address).\r\n");
+        return;
     }
+
+    // 阶段3：已登录，开放其他命令
+
+    socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
 }
 
 // 以下为内部命令处理函数（仅在.c中实现，.h不暴露）

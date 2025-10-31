@@ -32,6 +32,7 @@ typedef struct
     char peer_ip[INET_ADDRSTRLEN]; // 客户端IP（PORT模式用）
     int peer_port;                 // 客户端端口（PORT模式用）
     int pasv_port;                 // 服务器临时端口（PASV模式用）
+    int pending_user_anon;         // 0: 未进入匿名登录流程；1: 已收到USER anonymous，等待PASS
 } ClientConn;
 
 typedef struct
@@ -56,8 +57,7 @@ void client_conn_list_remove(ClientConnList *list, int ctrl_fd);
 // 销毁动态列表及所有连接资源
 void client_conn_list_destroy(ClientConnList *list);
 
-// 处理单个客户端请求：
-// 返回1表示需要关闭并移除该连接，0表示保留连接
+// 处理单个客户端请求：返回1表示需要关闭并移除该连接，0表示保留连接
 int handle_client_cmd(ClientConn *conn);
 
 // 管理多客户端连接（基于select()循环，处理就绪事件）

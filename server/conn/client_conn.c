@@ -237,6 +237,7 @@ void client_conn_init(ClientConn *conn, int ctrl_fd, const char *root_dir)
     memset(conn, 0, sizeof(ClientConn));
     conn->ctrl_fd = ctrl_fd;
     conn->auth_state = AUTH_STATE_UNAUTH;
+    conn->pending_user_anon = 0;
     strcpy(conn->current_dir, root_dir); // 初始目录为根目录
 }
 
@@ -254,14 +255,14 @@ int handle_client_cmd(ClientConn *conn)
     char cmd[16], args[1024];
     if (utils_split_cmd(buf, cmd, sizeof(cmd), args, sizeof(args)) != 0)
     {
-        socket_send(conn->ctrl_fd, "500 Invalid command format");
+        socket_send(conn->ctrl_fd, "500 Invalid command format.\r\n");
         return 0;
     }
 
     // 若为退出命令返回1，其余命令返回0
     if (strcmp(cmd, "QUIT") == 0)
     {
-        socket_send(conn->ctrl_fd, "221 Goodbye");
+        socket_send(conn->ctrl_fd, "221 Goodbye.\r\n");
         return 1;
     }
     else
@@ -383,7 +384,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
             }
 
             // 发送欢迎信息
-            socket_send(ctrl_fd, "220 Welcome to FTP server");
+            socket_send(ctrl_fd, "220 Anonymous FTP server ready.\r\n");
             printf("New connection from %s:%d (used: %zu/%zu)\n",
                    client_ip, client_port, client_list->used, client_list->capacity);
         }
