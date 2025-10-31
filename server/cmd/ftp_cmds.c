@@ -5,9 +5,8 @@
  * @param conn 客户端连接信息结构体指针
  * @param cmd 客户端发送的命令字符串
  * @param args 客户端发送的命令参数字符串
- * @return FTP响应码
  */
-int cmd_process(ClientConn *conn, const char *cmd, const char *args)
+void cmd_process(ClientConn *conn, const char *cmd, const char *args)
 {
 }
 
