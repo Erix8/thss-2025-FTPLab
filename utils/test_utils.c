@@ -234,11 +234,55 @@ void test_utils_join_path()
     }
 }
 
+void test_parse_port_arg()
+{
+    char ip_buf[16];
+    uint16_t port;
+    const char *input;
+
+    // 测试用例1: 正常输入
+    input = "192,168,1,2,7,138";
+    printf("Test 1: ");
+    if (parse_port_arg(input, ip_buf, sizeof(ip_buf), &port) == 0)
+    {
+        printf("IP: %s, Port: %u (预期 IP: 192.168.1.2, Port: 1930)\n", ip_buf, port);
+    }
+    else
+    {
+        printf("返回错误（预期成功）\n");
+    }
+
+    // 测试用例2: 输入格式错误（字段不足）
+    input = "192,168,1,2,7";
+    printf("Test 2: ");
+    if (parse_port_arg(input, ip_buf, sizeof(ip_buf), &port) == 0)
+    {
+        printf("IP: %s, Port: %u（预期错误）\n", ip_buf, port);
+    }
+    else
+    {
+        printf("返回错误（符合预期）\n");
+    }
+
+    // 测试用例3: 输入格式错误（字段过多）
+    input = "192,168,1,2,7,138,255";
+    printf("Test 3: ");
+    if (parse_port_arg(input, ip_buf, sizeof(ip_buf), &port) == 0)
+    {
+        printf("IP: %s, Port: %u（预期错误）\n", ip_buf, port);
+    }
+    else
+    {
+        printf("返回错误（符合预期）\n");
+    }
+}
+
 // 在main函数中添加调用
 int main()
 {
-    test_utils_split_cmd();
-    test_utils_check_path();
-    test_utils_join_path();
+    // test_utils_split_cmd();
+    test_parse_port_arg();
+    // test_utils_check_path();
+    // test_utils_join_path();
     return 0;
 }

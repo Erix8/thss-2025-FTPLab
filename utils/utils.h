@@ -2,6 +2,7 @@
 #define UTILS_H
 
 #include <stddef.h>
+#include <stdlib.h>
 
 /**
  * 拼接根目录与相对路径，生成安全的绝对路径（防止路径越权）
@@ -31,5 +32,15 @@ int utils_check_path(const char *root, const char *target);
  * @return 0：成功；-1：参数无效或缓冲区不足；-2：空命令
  */
 int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args, size_t args_len);
+
+/**
+ * 解析FTP PORT命令参数，提取IP地址和端口号
+ * @param args PORT命令参数字符串（格式如"h1,h2,h3,h4,p1,p2"）
+ * @param ip_buf 输出IP地址缓冲区（建议至少16字节）
+ * @param ip_len 输出IP地址缓冲区长度
+ * @param port_out 输出端口号指针
+ * @return 0：成功；-1：参数无效或格式错误
+ */
+int parse_port_arg(const char *args, char *ip_buf, size_t ip_len, uint16_t *port_out);
 
 #endif

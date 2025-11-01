@@ -1,6 +1,7 @@
 #include "client_conn.h"
 #include "../net/socket_utils.h"
 #include "../../utils/utils.h"
+#include "../cmd/ftp_cmds.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -179,10 +180,13 @@ void client_conn_list_remove(ClientConnList *list, int ctrl_fd)
                 socket_close(list->data[i].ctrl_fd);
             if (list->data[i].data_fd >= 3)
                 socket_close(list->data[i].data_fd);
+            if (list->data[i].pasv_listen_fd >= 3)
+                socket_close(list->data[i].pasv_listen_fd);
             // 标记槽位为空闲
             memset(&list->data[i], 0, sizeof(ClientConn));
             list->data[i].ctrl_fd = -1;
             list->data[i].data_fd = -1;
+            list->data[i].pasv_listen_fd = -1;
             list->used--;
             printf("Client %d removed (used: %zu/%zu)\n", ctrl_fd, list->used, list->capacity);
             // 当空闲槽位过多时缩容（避免内存浪费）
@@ -216,6 +220,10 @@ void client_conn_list_destroy(ClientConnList *list)
             {
                 socket_close(list->data[i].data_fd);
             }
+            if (list->data[i].pasv_listen_fd != -1)
+            {
+                socket_close(list->data[i].pasv_listen_fd);
+            }
         }
     }
     // 释放数组和列表结构体
@@ -236,6 +244,12 @@ void client_conn_init(ClientConn *conn, int ctrl_fd, const char *root_dir)
     memset(conn, 0, sizeof(ClientConn));
     conn->ctrl_fd = ctrl_fd;
     conn->auth_state = AUTH_STATE_UNAUTH;
+    conn->pending_user_anon = 0;
+    conn->data_fd = -1;
+    conn->data_mode = DATA_MODE_NONE;
+    conn->data_host[0] = '\0';
+    conn->data_port = 0;
+    conn->pasv_listen_fd = -1;
     strcpy(conn->current_dir, root_dir); // 初始目录为根目录
 }
 
@@ -249,35 +263,24 @@ int handle_client_cmd(ClientConn *conn)
         // 客户端断开连接（由conn_manager_run处理移除）
         return 1;
     }
-    // 解析并处理命令（简化版，后续对接cmd_process）
+    // 解析命令，若不合法返回500
     char cmd[16], args[1024];
     if (utils_split_cmd(buf, cmd, sizeof(cmd), args, sizeof(args)) != 0)
     {
-        socket_send(conn->ctrl_fd, "500 Invalid command format");
+        socket_send(conn->ctrl_fd, "500 Invalid command format.\r\n");
         return 0;
     }
 
-    // cmd_process(conn, cmd, args);
-
-    if (strcmp(cmd, "USER") == 0)
+    // 若为退出命令返回1，其余命令返回0
+    if (strcmp(cmd, "QUIT") == 0)
     {
-        socket_send(conn->ctrl_fd, "331 Please specify the password");
-        return 0;
-    }
-    else if (strcmp(cmd, "PASS") == 0)
-    {
-        conn->auth_state = AUTH_STATE_AUTHED;
-        socket_send(conn->ctrl_fd, "230 Login successful");
-        return 0;
-    }
-    else if (strcmp(cmd, "QUIT") == 0)
-    {
-        socket_send(conn->ctrl_fd, "221 Goodbye");
+        socket_send(conn->ctrl_fd, "221 Goodbye.\r\n");
         return 1;
     }
     else
     {
-        socket_send(conn->ctrl_fd, "502 Command not implemented");
+        // 处理其他命令，返回对应信息
+        cmd_process(conn, cmd, args);
         return 0;
     }
 }
@@ -393,7 +396,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
             }
 
             // 发送欢迎信息
-            socket_send(ctrl_fd, "220 Welcome to FTP server");
+            socket_send(ctrl_fd, "220 Anonymous FTP server ready.\r\n");
             printf("New connection from %s:%d (used: %zu/%zu)\n",
                    client_ip, client_port, client_list->used, client_list->capacity);
         }
