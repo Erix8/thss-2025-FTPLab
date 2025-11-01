@@ -3,6 +3,19 @@
 
 #include "../conn/client_conn.h"
 
+typedef enum
+{
+    XFER_RETR,
+    XFER_STOR
+} XferType;
+
+typedef struct
+{
+    ClientConn *conn;
+    XferType type;
+    char filename[PATH_MAX];
+} XferTask;
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针

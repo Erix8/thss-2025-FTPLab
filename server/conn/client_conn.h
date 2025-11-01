@@ -35,6 +35,7 @@ typedef struct
     char data_host[INET_ADDRSTRLEN]; // 主动模式对端IP（来自PORT）
     uint16_t data_port;              // 主动模式对端端口（来自PORT）
     int pasv_listen_fd;              // 被动模式监听fd（未实现PASV时保持-1）
+    int xfer_in_progress;            // 是否有数据传输正在进行（RETR/STOR）
 } ClientConn;
 
 typedef struct
