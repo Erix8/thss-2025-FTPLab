@@ -230,9 +230,21 @@ static void cmd_handle_type(ClientConn *conn, const char *args)
     while (end > args && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n'))
         end--;
 
+    // 空参数 -> 501
+    if (end <= args)
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+
+    // 仅取第一个标记进行比较
+    const char *p = args;
+    while (p < end && *p != ' ' && *p != '\t')
+        p++;
+    size_t len = (size_t)(p - args);
+
     // 构造参数片段进行比较
     char param[8];
-    size_t len = (size_t)(end - args);
     if (len >= sizeof(param))
         len = sizeof(param) - 1;
     memcpy(param, args, len);
