@@ -4,6 +4,59 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <time.h>
+
+// 选择并打开一个 20000-65535 的监听端口（被动模式）
+static int open_pasv_listener(uint16_t *out_port, int *out_fd)
+{
+    if (!out_port || !out_fd)
+        return -1;
+
+    static int seeded = 0;
+    if (!seeded)
+    {
+        srand((unsigned)time(NULL) ^ (unsigned)getpid());
+        seeded = 1;
+    }
+
+    const int min_p = 20000;
+    const int max_p = 65535;
+    const int range = max_p - min_p + 1;
+
+    for (int attempt = 0; attempt < 64; attempt++)
+    {
+        uint16_t port = (uint16_t)(min_p + (rand() % range));
+
+        int s = socket(AF_INET, SOCK_STREAM, 0);
+        if (s < 0)
+            continue;
+
+        int reuse = 1;
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
+        struct sockaddr_in sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sin_family = AF_INET;
+        sa.sin_addr.s_addr = htonl(INADDR_ANY);
+        sa.sin_port = htons(port);
+
+        if (bind(s, (struct sockaddr *)&sa, sizeof(sa)) == 0)
+        {
+            if (listen(s, 1) == 0)
+            {
+                *out_port = port;
+                *out_fd = s;
+                return 0;
+            }
+        }
+        close(s);
+    }
+    return -1;
+}
 
 static void cmd_handle_user(ClientConn *conn, const char *args)
 {
@@ -97,6 +150,65 @@ static void cmd_handle_port(ClientConn *conn, const char *args)
     socket_send(conn->ctrl_fd, "200 PORT command successful.\r\n");
 }
 
+static void cmd_handle_pasv(ClientConn *conn, const char *args)
+{
+    (void)args;
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+
+    // 关闭已有数据连接与旧的PASV监听（RFC建议）
+    if (conn->data_fd >= 3)
+    {
+        socket_close(conn->data_fd);
+    }
+    conn->data_fd = -1;
+    if (conn->pasv_listen_fd >= 3)
+    {
+        socket_close(conn->pasv_listen_fd);
+    }
+    conn->pasv_listen_fd = -1;
+
+    // 打开新的被动监听端口
+    uint16_t pasv_port = 0;
+    int pasv_fd = -1;
+    if (open_pasv_listener(&pasv_port, &pasv_fd) != 0)
+    {
+        socket_send(conn->ctrl_fd, "425 Can't open passive connection.\r\n");
+        return;
+    }
+
+    // 获取服务器在控制连接上的本地IP，作为PASV应答中的 h1..h4
+    struct sockaddr_in local;
+    socklen_t llen = sizeof(local);
+    memset(&local, 0, sizeof(local));
+    if (getsockname(conn->ctrl_fd, (struct sockaddr *)&local, &llen) != 0)
+    {
+        socket_close(pasv_fd);
+        socket_send(conn->ctrl_fd, "425 Can't determine server address.\r\n");
+        return;
+    }
+
+    uint32_t addr = ntohl(local.sin_addr.s_addr);
+    unsigned h1 = (addr >> 24) & 0xFF;
+    unsigned h2 = (addr >> 16) & 0xFF;
+    unsigned h3 = (addr >> 8) & 0xFF;
+    unsigned h4 = (addr) & 0xFF;
+    unsigned p1 = (pasv_port >> 8) & 0xFF;
+    unsigned p2 = (pasv_port) & 0xFF;
+
+    // 保存会话状态
+    conn->data_mode = DATA_MODE_PASV;
+    conn->pasv_listen_fd = pasv_fd;
+
+    // 返回 227（按建议格式：前面带 '='）
+    char resp[128];
+    snprintf(resp, sizeof(resp), "227 =%u,%u,%u,%u,%u,%u\r\n", h1, h2, h3, h4, p1, p2);
+    socket_send(conn->ctrl_fd, resp);
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -144,11 +256,15 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
         cmd_handle_port(conn, args);
         return;
     }
+    else if (strcmp(cmd, "PASV") == 0)
+    {
+        cmd_handle_pasv(conn, args);
+        return;
+    }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
 }
 
 // 以下为内部命令处理函数（仅在.c中实现，.h不暴露）
-// int cmd_handle_port(ClientConn* conn, const char* args);  // 处理PORT命令
 // int cmd_handle_pasv(ClientConn* conn, const char* args);  // 处理PASV命令
 // int cmd_handle_retr(ClientConn* conn, const char* args);  // 处理RETR命令
 // int cmd_handle_stor(ClientConn* conn, const char* args);  // 处理STOR命令

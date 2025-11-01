@@ -180,10 +180,13 @@ void client_conn_list_remove(ClientConnList *list, int ctrl_fd)
                 socket_close(list->data[i].ctrl_fd);
             if (list->data[i].data_fd >= 3)
                 socket_close(list->data[i].data_fd);
+            if (list->data[i].pasv_listen_fd >= 3)
+                socket_close(list->data[i].pasv_listen_fd);
             // 标记槽位为空闲
             memset(&list->data[i], 0, sizeof(ClientConn));
             list->data[i].ctrl_fd = -1;
             list->data[i].data_fd = -1;
+            list->data[i].pasv_listen_fd = -1;
             list->used--;
             printf("Client %d removed (used: %zu/%zu)\n", ctrl_fd, list->used, list->capacity);
             // 当空闲槽位过多时缩容（避免内存浪费）
@@ -216,6 +219,10 @@ void client_conn_list_destroy(ClientConnList *list)
             if (list->data[i].data_fd != -1)
             {
                 socket_close(list->data[i].data_fd);
+            }
+            if (list->data[i].pasv_listen_fd != -1)
+            {
+                socket_close(list->data[i].pasv_listen_fd);
             }
         }
     }
