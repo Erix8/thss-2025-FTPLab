@@ -6,6 +6,43 @@
 #define CMD_MAX_LEN 16
 #define ARGS_MAX_LEN 10
 
+// 解析 "h1,h2,h3,h4,p1,p2" -> ip字符串和端口
+int parse_port_arg(const char *args, char *ip_buf, size_t ip_len, uint16_t *port_out)
+{
+    if (!args || !ip_buf || !port_out)
+        return -1;
+
+    // 拷贝一份用于分割
+    char tmp[128];
+    strncpy(tmp, args, sizeof(tmp) - 1);
+    tmp[sizeof(tmp) - 1] = '\0';
+
+    int parts[6] = {0};
+    char *saveptr = NULL;
+    char *tok = strtok_r(tmp, ",", &saveptr);
+    for (int i = 0; i < 6; i++)
+    {
+        if (!tok)
+            return -1;
+        char *endp = NULL;
+        long v = strtol(tok, &endp, 10);
+        if (*endp != '\0' || v < 0 || v > 255)
+            return -1;
+        parts[i] = (int)v;
+        tok = strtok_r(NULL, ",", &saveptr);
+    }
+    if (tok != NULL)
+        return -1; // 多余字段
+
+    // 组合 IP 和端口
+    snprintf(ip_buf, ip_len, "%d.%d.%d.%d", parts[0], parts[1], parts[2], parts[3]);
+    int p = parts[4] * 256 + parts[5];
+    if (p <= 0 || p > 65535)
+        return -1;
+    *port_out = (uint16_t)p;
+    return 0;
+}
+
 /**
  * 拼接根目录与相对路径，生成安全的绝对路径（防止路径越权）
  * @param root 根目录路径（如"/ftp_root"）
