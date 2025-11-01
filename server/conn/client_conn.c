@@ -238,6 +238,11 @@ void client_conn_init(ClientConn *conn, int ctrl_fd, const char *root_dir)
     conn->ctrl_fd = ctrl_fd;
     conn->auth_state = AUTH_STATE_UNAUTH;
     conn->pending_user_anon = 0;
+    conn->data_fd = -1;
+    conn->data_mode = DATA_MODE_NONE;
+    conn->data_host[0] = '\0';
+    conn->data_port = 0;
+    conn->pasv_listen_fd = -1;
     strcpy(conn->current_dir, root_dir); // 初始目录为根目录
 }
 

@@ -1,6 +1,9 @@
 #include "ftp_cmds.h"
 #include "../net/socket_utils.h"
+#include "../utils/utils.h"
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 static void cmd_handle_user(ClientConn *conn, const char *args)
 {
@@ -53,6 +56,47 @@ static void cmd_handle_pass(ClientConn *conn, const char *args)
     return;
 }
 
+static void cmd_handle_port(ClientConn *conn, const char *args)
+{
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+
+    char ip[INET_ADDRSTRLEN];
+    uint16_t port = 0;
+    if (parse_port_arg(args, ip, sizeof(ip), &port) != 0)
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+
+    printf("Client%d PORT Mode: IP: %s, Port: %u\n", conn->ctrl_fd, ip, port);
+
+    // RFC语义：收到新的PORT时，停止任何被动监听并丢弃已有数据连接
+    if (conn->data_fd >= 3)
+    {
+        socket_close(conn->data_fd);
+    }
+    conn->data_fd = -1;
+
+    if (conn->pasv_listen_fd >= 3)
+    {
+        socket_close(conn->pasv_listen_fd);
+    }
+    conn->pasv_listen_fd = -1;
+
+    // 切换到主动模式，保存目标
+    conn->data_mode = DATA_MODE_PORT;
+    strncpy(conn->data_host, ip, sizeof(conn->data_host) - 1);
+    conn->data_host[sizeof(conn->data_host) - 1] = '\0';
+    conn->data_port = port;
+
+    // 确认
+    socket_send(conn->ctrl_fd, "200 PORT command successful.\r\n");
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -95,7 +139,11 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
     }
 
     // 阶段3：已登录，开放其他命令
-
+    if (strcmp(cmd, "PORT") == 0)
+    {
+        cmd_handle_port(conn, args);
+        return;
+    }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
 }
 

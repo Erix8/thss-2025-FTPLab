@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <limits.h>
 #include <unistd.h>
+#include <stdint.h>
 #include "../config/config.h"
 
 // 认证状态
@@ -17,6 +18,7 @@ typedef enum
 // 数据连接模式
 typedef enum
 {
+    DATA_MODE_NONE, // 尚未选择数据连接模式
     DATA_MODE_PORT, // PORT模式（主动）
     DATA_MODE_PASV  // PASV模式（被动）
 } DataMode;
@@ -24,15 +26,15 @@ typedef enum
 // 客户端连接信息
 typedef struct
 {
-    int ctrl_fd;                   // 控制连接socket（-1表示空闲）
-    int data_fd;                   // 数据连接socket
-    AuthState auth_state;          // 认证状态
-    char current_dir[PATH_MAX];    // 当前工作目录（基于根目录）
-    DataMode data_mode;            // 数据连接模式
-    char peer_ip[INET_ADDRSTRLEN]; // 客户端IP（PORT模式用）
-    int peer_port;                 // 客户端端口（PORT模式用）
-    int pasv_port;                 // 服务器临时端口（PASV模式用）
-    int pending_user_anon;         // 0: 未进入匿名登录流程；1: 已收到USER anonymous，等待PASS
+    int ctrl_fd;                     // 控制连接socket（-1表示空闲）
+    int data_fd;                     // 数据连接socket
+    AuthState auth_state;            // 认证状态
+    char current_dir[PATH_MAX];      // 当前工作目录（基于根目录）
+    DataMode data_mode;              // 数据连接模式
+    int pending_user_anon;           // 0: 未进入匿名登录流程；1: 已收到USER anonymous，等待PASS
+    char data_host[INET_ADDRSTRLEN]; // 主动模式对端IP（来自PORT）
+    uint16_t data_port;              // 主动模式对端端口（来自PORT）
+    int pasv_listen_fd;              // 被动模式监听fd（未实现PASV时保持-1）
 } ClientConn;
 
 typedef struct
