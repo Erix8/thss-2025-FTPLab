@@ -1,6 +1,7 @@
 #include "ftp_cmds.h"
 #include "../net/socket_utils.h"
 #include "../../utils/utils.h"
+#include "../transfer/data_transfer.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -9,6 +10,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <time.h>
+#include <pthread.h>
 
 // 选择并打开一个 20000-65535 的监听端口（被动模式）
 static int open_pasv_listener(uint16_t *out_port, int *out_fd)
@@ -56,6 +58,47 @@ static int open_pasv_listener(uint16_t *out_port, int *out_fd)
         close(s);
     }
     return -1;
+}
+
+static void *xfer_thread(void *arg)
+{
+    XferTask *task = (XferTask *)arg;
+    ClientConn *conn = task->conn;
+    // 标记响应 150
+    socket_send(conn->ctrl_fd, "150 Opening data connection.\r\n");
+    // 建立数据连接（PORT 主动 connect / PASV accept）
+    if (transfer_init_data_conn(conn) != 0)
+    {
+        socket_send(conn->ctrl_fd, "425 Can't open data connection.\r\n");
+        conn->xfer_in_progress = 0;
+        free(task);
+        return NULL;
+    }
+    int rc = -1;
+    if (task->type == XFER_RETR)
+    {
+        rc = transfer_send_file(conn, task->filename);
+    }
+    else
+    {
+        rc = transfer_recv_file(conn, task->filename);
+    }
+    // 关闭数据连接与复位状态
+    transfer_close_data_conn(conn);
+    if (rc == 0)
+    {
+        socket_send(conn->ctrl_fd, "226 Transfer complete.\r\n");
+    }
+    else
+    {
+        if (task->type == XFER_RETR)
+            socket_send(conn->ctrl_fd, "451 Requested action aborted: local error in processing.\r\n");
+        else
+            socket_send(conn->ctrl_fd, "550 Failed to create or write file.\r\n");
+    }
+    conn->xfer_in_progress = 0;
+    free(task);
+    return NULL;
 }
 
 static void cmd_handle_user(ClientConn *conn, const char *args)
@@ -260,6 +303,99 @@ static void cmd_handle_type(ClientConn *conn, const char *args)
     socket_send(conn->ctrl_fd, "504 Command not implemented for that parameter.\r\n");
 }
 
+static void cmd_handle_retr(ClientConn *conn, const char *args)
+{
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+    // 必须先 PORT 或 PASV
+    if (conn->data_mode == DATA_MODE_NONE)
+    {
+        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.\r\n");
+        return;
+    }
+    // 参数检查
+    if (!args || args[0] == '\0')
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+    if (conn->xfer_in_progress)
+    {
+        // 已有传输在进行，直接忽略或提示忙
+        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.\r\n");
+        return;
+    }
+    // 启动传输线程
+    XferTask *task = (XferTask *)malloc(sizeof(XferTask));
+    if (!task)
+    {
+        socket_send(conn->ctrl_fd, "451 Local error: out of memory.\r\n");
+        return;
+    }
+    task->conn = conn;
+    task->type = XFER_RETR;
+    // 保存文件名（由 data_transfer 内部做路径拼接与限制）
+    strncpy(task->filename, args, sizeof(task->filename) - 1);
+    task->filename[sizeof(task->filename) - 1] = '\0';
+    conn->xfer_in_progress = 1;
+    pthread_t th;
+    if (pthread_create(&th, NULL, xfer_thread, task) != 0)
+    {
+        conn->xfer_in_progress = 0;
+        free(task);
+        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.\r\n");
+        return;
+    }
+    pthread_detach(th);
+}
+
+static void cmd_handle_stor(ClientConn *conn, const char *args)
+{
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+    if (conn->data_mode == DATA_MODE_NONE)
+    {
+        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.\r\n");
+        return;
+    }
+    if (!args || args[0] == '\0')
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+    if (conn->xfer_in_progress)
+    {
+        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.\r\n");
+        return;
+    }
+    XferTask *task = (XferTask *)malloc(sizeof(XferTask));
+    if (!task)
+    {
+        socket_send(conn->ctrl_fd, "451 Local error: out of memory.\r\n");
+        return;
+    }
+    task->conn = conn;
+    task->type = XFER_STOR;
+    strncpy(task->filename, args, sizeof(task->filename) - 1);
+    task->filename[sizeof(task->filename) - 1] = '\0';
+    conn->xfer_in_progress = 1;
+    pthread_t th;
+    if (pthread_create(&th, NULL, xfer_thread, task) != 0)
+    {
+        conn->xfer_in_progress = 0;
+        free(task);
+        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.\r\n");
+        return;
+    }
+    pthread_detach(th);
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -322,12 +458,20 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
         cmd_handle_type(conn, args);
         return;
     }
+    else if (strcmp(cmd, "RETR") == 0)
+    {
+        cmd_handle_retr(conn, args);
+        return;
+    }
+    else if (strcmp(cmd, "STOR") == 0)
+    {
+        cmd_handle_stor(conn, args);
+        return;
+    }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
 }
 
 // 以下为内部命令处理函数（仅在.c中实现，.h不暴露）
-// int cmd_handle_retr(ClientConn* conn, const char* args);  // 处理RETR命令
-// int cmd_handle_stor(ClientConn* conn, const char* args);  // 处理STOR命令
 // int cmd_handle_cwd(ClientConn* conn, const char* args);   // 处理CWD命令
 // int cmd_handle_pwd(ClientConn* conn, const char* args);   // 处理PWD命令
 // int cmd_handle_mkd(ClientConn* conn, const char* args);   // 处理MKD命令

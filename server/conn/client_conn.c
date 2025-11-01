@@ -250,6 +250,7 @@ void client_conn_init(ClientConn *conn, int ctrl_fd, const char *root_dir)
     conn->data_host[0] = '\0';
     conn->data_port = 0;
     conn->pasv_listen_fd = -1;
+    conn->xfer_in_progress = 0;
     strcpy(conn->current_dir, root_dir); // 初始目录为根目录
 }
 
@@ -263,6 +264,13 @@ int handle_client_cmd(ClientConn *conn)
         // 客户端断开连接（由conn_manager_run处理移除）
         return 1;
     }
+
+    // 传输期间：忽略该客户端的控制命令
+    if (conn->xfer_in_progress)
+    {
+        return 0;
+    }
+
     // 解析命令，若不合法返回500
     char cmd[16], args[1024];
     if (utils_split_cmd(buf, cmd, sizeof(cmd), args, sizeof(args)) != 0)
