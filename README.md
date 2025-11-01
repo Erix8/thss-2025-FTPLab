@@ -65,7 +65,8 @@ gcc -o ftp_server \
     server/cmd/ftp_cmds.c \
     server/transfer/data_transfer.c \
     utils/utils.c \
-    -Iserver/config -Iserver/net -Iserver/conn -Iutils
+    -Iserver/config -Iserver/net -Iserver/conn -Iutils \
+    -pthread
 ```
 
 #### 编译客户端
