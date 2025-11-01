@@ -63,6 +63,7 @@ gcc -o ftp_server \
     server/net/socket_utils.c \
     server/conn/client_conn.c \
     server/cmd/ftp_cmds.c \
+    server/transfer/data_transfer.c \
     utils/utils.c \
     -Iserver/config -Iserver/net -Iserver/conn -Iutils
 ```
