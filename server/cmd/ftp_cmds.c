@@ -209,6 +209,45 @@ static void cmd_handle_pasv(ClientConn *conn, const char *args)
     socket_send(conn->ctrl_fd, resp);
 }
 
+static void cmd_handle_syst(ClientConn *conn, const char *args)
+{
+    (void)args;
+    socket_send(conn->ctrl_fd, "215 UNIX Type: L8\r\n");
+}
+static void cmd_handle_type(ClientConn *conn, const char *args)
+{
+    // 只接受 TYPE I，其它参数返回错误
+    if (!args)
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+
+    // 跳过前后空白
+    while (*args == ' ' || *args == '\t')
+        args++;
+    const char *end = args + strlen(args);
+    while (end > args && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n'))
+        end--;
+
+    // 构造参数片段进行比较
+    char param[8];
+    size_t len = (size_t)(end - args);
+    if (len >= sizeof(param))
+        len = sizeof(param) - 1;
+    memcpy(param, args, len);
+    param[len] = '\0';
+
+    if (strcasecmp(param, "I") == 0)
+    {
+        socket_send(conn->ctrl_fd, "200 Type set to I.\r\n");
+        return;
+    }
+
+    // 不支持的 TYPE 参数
+    socket_send(conn->ctrl_fd, "504 Command not implemented for that parameter.\r\n");
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -261,11 +300,20 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
         cmd_handle_pasv(conn, args);
         return;
     }
+    else if (strcmp(cmd, "SYST") == 0)
+    {
+        cmd_handle_syst(conn, args);
+        return;
+    }
+    else if (strcmp(cmd, "TYPE") == 0)
+    {
+        cmd_handle_type(conn, args);
+        return;
+    }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
 }
 
 // 以下为内部命令处理函数（仅在.c中实现，.h不暴露）
-// int cmd_handle_pasv(ClientConn* conn, const char* args);  // 处理PASV命令
 // int cmd_handle_retr(ClientConn* conn, const char* args);  // 处理RETR命令
 // int cmd_handle_stor(ClientConn* conn, const char* args);  // 处理STOR命令
 // int cmd_handle_cwd(ClientConn* conn, const char* args);   // 处理CWD命令
@@ -273,6 +321,3 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
 // int cmd_handle_mkd(ClientConn* conn, const char* args);   // 处理MKD命令
 // int cmd_handle_rmd(ClientConn* conn, const char* args);   // 处理RMD命令
 // int cmd_handle_list(ClientConn* conn, const char* args);  // 处理LIST命令
-// int cmd_handle_syst(ClientConn* conn, const char* args);  // 处理SYST命令
-// int cmd_handle_type(ClientConn* conn, const char* args);  // 处理TYPE命令
-// int cmd_handle_quit(ClientConn* conn, const char* args);  // 处理QUIT命令
