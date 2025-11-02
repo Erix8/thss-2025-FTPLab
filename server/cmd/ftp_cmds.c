@@ -156,7 +156,7 @@ static int resolve_abs_path(ClientConn *conn, const char *arg, char *abs_path, s
         // printf("[RESOLVE] relative join: base='%s' rel='%s'\n", conn->current_dir, trimmed);
         if (!utils_join_path(conn->current_dir, trimmed, tmp, sizeof(tmp)))
         {
-            printf("[RESOLVE] utils_join_path failed (rel): base='%s' rel='%s'\n", conn->current_dir, trimmed);
+            // printf("[RESOLVE] utils_join_path failed (rel): base='%s' rel='%s'\n", conn->current_dir, trimmed);
             return -1;
         }
         // printf("[RESOLVE] joined(rel)='%s'\n", tmp);
