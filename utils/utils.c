@@ -44,7 +44,7 @@ int parse_port_arg(const char *args, char *ip_buf, size_t ip_len, uint16_t *port
 }
 
 /**
- * 拼接根目录与相对路径，生成安全的绝对路径（防止路径越权）
+ * 拼接根目录与相对路径，生成绝对路径
  * @param root 根目录路径（如"/ftp_root"）
  * @param relative 相对路径（如"subdir/file.txt"）
  * @param result 输出拼接后的绝对路径缓冲区（需足够大）
@@ -118,12 +118,6 @@ char *utils_join_path(const char *root, const char *relative, char *result, size
     if (q > start + 1 && *(q - 1) == '/')
         q--; // 仅当路径长度 > 1 时才移除末尾斜杠
     *q = '\0';
-
-    // 检查规范化后的路径是否在根目录内
-    if (!utils_check_path(root, normalized))
-    {
-        return NULL;
-    }
 
     if (strlen(normalized) >= result_len)
         return NULL;

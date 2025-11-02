@@ -110,7 +110,7 @@ static int resolve_abs_path(ClientConn *conn, const char *arg, char *abs_path, s
     if (!conn || !arg || !abs_path || len == 0)
         return -1;
 
-    printf("[RESOLVE] root='%s' cwd='%s' raw='%s'\n", conn->root_dir, conn->current_dir, arg);
+    // printf("[RESOLVE] root='%s' cwd='%s' raw='%s'\n", conn->root_dir, conn->current_dir, arg);
 
     // trim
     while (*arg == ' ' || *arg == '\t')
@@ -126,7 +126,7 @@ static int resolve_abs_path(ClientConn *conn, const char *arg, char *abs_path, s
         return -1;
     memcpy(trimmed, arg, alen);
     trimmed[alen] = '\0';
-    printf("[RESOLVE] trimmed='%s' (len=%zu)\n", trimmed, alen);
+    // printf("[RESOLVE] trimmed='%s' (len=%zu)\n", trimmed, alen);
 
     char tmp[PATH_MAX];
     if (trimmed[0] == '/')
@@ -137,41 +137,41 @@ static int resolve_abs_path(ClientConn *conn, const char *arg, char *abs_path, s
         {
             strncpy(tmp, conn->root_dir, sizeof(tmp) - 1);
             tmp[sizeof(tmp) - 1] = '\0';
-            printf("[RESOLVE] absolute to root -> '%s'\n", tmp);
+            // printf("[RESOLVE] absolute to root -> '%s'\n", tmp);
         }
         else
         {
-            printf("[RESOLVE] absolute join: base='%s' rel='%s'\n", conn->root_dir, rel);
+            // printf("[RESOLVE] absolute join: base='%s' rel='%s'\n", conn->root_dir, rel);
             if (!utils_join_path(conn->root_dir, rel, tmp, sizeof(tmp)))
             {
-                printf("[RESOLVE] utils_join_path failed (abs): base='%s' rel='%s'\n", conn->root_dir, rel);
+                // printf("[RESOLVE] utils_join_path failed (abs): base='%s' rel='%s'\n", conn->root_dir, rel);
                 return -1;
             }
-            printf("[RESOLVE] joined(abs)='%s'\n", tmp);
+            // printf("[RESOLVE] joined(abs)='%s'\n", tmp);
         }
     }
     else
     {
         // 相对路径：基于当前目录
-        printf("[RESOLVE] relative join: base='%s' rel='%s'\n", conn->current_dir, trimmed);
+        // printf("[RESOLVE] relative join: base='%s' rel='%s'\n", conn->current_dir, trimmed);
         if (!utils_join_path(conn->current_dir, trimmed, tmp, sizeof(tmp)))
         {
             printf("[RESOLVE] utils_join_path failed (rel): base='%s' rel='%s'\n", conn->current_dir, trimmed);
             return -1;
         }
-        printf("[RESOLVE] joined(rel)='%s'\n", tmp);
+        // printf("[RESOLVE] joined(rel)='%s'\n", tmp);
     }
 
     // 安全检查：目标必须在 root_dir 内
     if (utils_check_path(conn->root_dir, tmp) == 0)
     {
-        printf("[RESOLVE] utils_check_path denied: root='%s' target='%s' \n", conn->root_dir, tmp);
+        // printf("[RESOLVE] utils_check_path denied: root='%s' target='%s' \n", conn->root_dir, tmp);
         return -1;
     }
 
     strncpy(abs_path, tmp, len - 1);
     abs_path[len - 1] = '\0';
-    printf("[RESOLVE] final='%s'\n", abs_path);
+    // printf("[RESOLVE] final='%s'\n", abs_path);
     return 0;
 }
 
