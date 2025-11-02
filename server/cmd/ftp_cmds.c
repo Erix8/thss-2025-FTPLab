@@ -278,7 +278,7 @@ static void cmd_handle_port(ClientConn *conn, const char *args)
         return;
     }
 
-    printf("Client%d PORT Mode: IP: %s, Port: %u\n", conn->ctrl_fd, ip, port);
+    // printf("Client%d PORT Mode: IP: %s, Port: %u\n", conn->ctrl_fd, ip, port);
 
     // RFC语义：收到新的PORT时，停止任何被动监听并丢弃已有数据连接
     if (conn->data_fd >= 3)

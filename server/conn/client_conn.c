@@ -18,7 +18,7 @@ static void handle_sigint(int signum)
 {
     if (signum == SIGINT)
     {
-        printf("\nReceived Ctrl+C, shutting down server...\n");
+        // printf("\nReceived Ctrl+C, shutting down server...\n");
         if (g_client_list)
         {
             client_conn_list_destroy(g_client_list);
@@ -71,11 +71,10 @@ static int client_conn_list_resize(ClientConnList *list, size_t new_capacity)
     // 新容量不能小于已使用数量（避免数据丢失）
     if (new_capacity < list->used)
     {
-        fprintf(stderr, "new capacity (%zu) < used count (%zu)\n", new_capacity, list->used);
+        // fprintf(stderr, "new capacity (%zu) < used count (%zu)\n", new_capacity, list->used);
         return -1;
     }
     // 重新分配内存（保留原有数据）
-    ClientConn *old_data = list->data;
     size_t old_capacity = list->capacity;
     ClientConn *new_data = realloc(list->data, sizeof(ClientConn) * new_capacity);
     if (!new_data)
@@ -96,7 +95,7 @@ static int client_conn_list_resize(ClientConnList *list, size_t new_capacity)
     // 更新列表信息
     list->data = new_data;
     list->capacity = new_capacity;
-    printf("ClientConnList resized: %zu -> %zu\n", old_capacity, new_capacity);
+    // printf("ClientConnList resized: %zu -> %zu\n", old_capacity, new_capacity);
     return 0;
 }
 
@@ -110,7 +109,7 @@ int client_conn_list_add(ClientConnList *list, ClientConn *new_conn)
 {
     if (!list || !new_conn || new_conn->ctrl_fd == -1)
     {
-        fprintf(stderr, "invalid param for client_conn_list_add\n");
+        // fprintf(stderr, "invalid param for client_conn_list_add\n");
         return -1;
     }
 
@@ -131,7 +130,7 @@ int client_conn_list_add(ClientConnList *list, ClientConn *new_conn)
         size_t new_capacity = (list->capacity == 0) ? 4 : list->capacity * 2; // 初始容量为4
         if (client_conn_list_resize(list, new_capacity) != 0)
         {
-            fprintf(stderr, "resize client connection list failed.\n");
+            // fprintf(stderr, "resize client connection list failed.\n");
             return -1;
         }
         // 扩容后再重新扫描第一个空闲槽位，避免假设 list->used==first_new_slot
@@ -147,7 +146,7 @@ int client_conn_list_add(ClientConnList *list, ClientConn *new_conn)
         if (free_idx == list->capacity)
         {
             // 理论上不应该到这里
-            fprintf(stderr, "no free slot found after resize\n");
+            // fprintf(stderr, "no free slot found after resize\n");
             return -1;
         }
     }
@@ -188,7 +187,7 @@ void client_conn_list_remove(ClientConnList *list, int ctrl_fd)
             list->data[i].data_fd = -1;
             list->data[i].pasv_listen_fd = -1;
             list->used--;
-            printf("Client %d removed (used: %zu/%zu)\n", ctrl_fd, list->used, list->capacity);
+            // printf("Client %d removed (used: %zu/%zu)\n", ctrl_fd, list->used, list->capacity);
             // 当空闲槽位过多时缩容（避免内存浪费）
             // 条件：used < capacity/2 且 capacity > 4（最小容量保留4）
             if (list->used < list->capacity / 2 && list->capacity / 2 >= 4)
@@ -230,7 +229,7 @@ void client_conn_list_destroy(ClientConnList *list)
     free(list->data);
     free(list);
     list = NULL; // 避免野指针
-    printf("ClientConnList destroyed\n");
+    // printf("ClientConnList destroyed\n");
 }
 
 /**
@@ -308,7 +307,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
     ClientConnList *client_list = client_conn_list_init(4);
     if (!client_list)
     {
-        fprintf(stderr, "init ClientConnList failed\n");
+        // fprintf(stderr, "init ClientConnList failed\n");
         return;
     }
 
@@ -345,7 +344,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
             else if (ctrl_fd >= FD_SETSIZE)
             {
                 // 超过可被 select 支持的范围，安全移除此连接
-                fprintf(stderr, "client fd %d >= FD_SETSIZE (%d), removing it\n", ctrl_fd, FD_SETSIZE);
+                // fprintf(stderr, "client fd %d >= FD_SETSIZE (%d), removing it\n", ctrl_fd, FD_SETSIZE);
                 client_conn_list_remove(client_list, ctrl_fd);
             }
         }
@@ -362,7 +361,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
         if (FD_ISSET(listen_fd, &read_fds))
         {
             // 检查是否超过最大连接数限制
-            if (client_list->used >= config->max_conn)
+            if (client_list->used >= (int)config->max_conn)
             {
                 char client_ip[INET_ADDRSTRLEN];
                 int client_port;
@@ -371,8 +370,8 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
                 {
                     socket_send(ctrl_fd, "421 Too many connections");
                     socket_close(ctrl_fd);
-                    printf("Rejected connection from %s:%d (max conn: %d)\n",
-                           client_ip, client_port, config->max_conn);
+                    // printf("Rejected connection from %s:%d (max conn: %d)\n",
+                    //        client_ip, client_port, config->max_conn);
                 }
                 continue;
             }
@@ -393,7 +392,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
                 // 不在 select 可接受范围内，拒绝连接并关闭
                 socket_send(ctrl_fd, "421 Too many file descriptors");
                 socket_close(ctrl_fd);
-                fprintf(stderr, "accepted fd %d out of select range [0,%d), closed\n", ctrl_fd, FD_SETSIZE);
+                // fprintf(stderr, "accepted fd %d out of select range [0,%d), closed\n", ctrl_fd, FD_SETSIZE);
                 continue;
             }
 
@@ -409,8 +408,8 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
 
             // 发送欢迎信息
             socket_send(ctrl_fd, "220 Anonymous FTP server ready.\r\n");
-            printf("New connection from %s:%d (used: %zu/%zu)\n",
-                   client_ip, client_port, client_list->used, client_list->capacity);
+            // printf("New connection from %s:%d (used: %zu/%zu)\n",
+            //        client_ip, client_port, client_list->used, client_list->capacity);
         }
 
         // 步骤5：处理已连接客户端的命令

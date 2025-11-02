@@ -50,7 +50,7 @@ int config_validate(ServerConfig *config)
     // 校验端口范围
     if (config->port < 1 || config->port > 65535)
     {
-        fprintf(stderr, "Invalid port: %d\n", config->port);
+        // fprintf(stderr, "Invalid port: %d\n", config->port);
         return 1;
     }
     // 其他校验（如根目录存在性）暂略
