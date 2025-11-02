@@ -12,18 +12,31 @@
 void config_init(int argc, char *argv[], ServerConfig *config)
 {
     // 默认配置
-    config->port = 21;                // 默认端口21
-    strcpy(config->root_dir, "/tmp"); // 默认根目录
-    config->max_conn = 20;            // 默认最大连接数
+    config->port = 21;                                               // 默认端口21
+    strncpy(config->root_dir, "/tmp", sizeof(config->root_dir) - 1); // 默认根目录/tmp
+    config->root_dir[sizeof(config->root_dir) - 1] = '\0';           // 确保字符串以'\0'结尾
+    config->max_conn = 20;                                           // 默认最大连接数
 
     // 简单解析命令行参数（仅支持 -p 端口）
     for (int i = 1; i < argc; i++)
     {
-        if (strcmp(argv[i], "-p") == 0 && i + 1 < argc)
+        if ((strcmp(argv[i], "-port") == 0) && i + 1 < argc)
         {
-            config->port = atoi(argv[i + 1]);
-            i++;
+            char *endp = NULL;
+            long p = strtol(argv[i + 1], &endp, 10);
+            if (endp && *endp == '\0' && p >= 1 && p <= 65535)
+            {
+                config->port = (int)p;
+            }
+            i++; // 跳过端口参数
         }
+        else if (strcmp(argv[i], "-root") == 0 && i + 1 < argc)
+        {
+            strncpy(config->root_dir, argv[i + 1], sizeof(config->root_dir) - 1);
+            config->root_dir[sizeof(config->root_dir) - 1] = '\0';
+            i++; // 跳过路径参数
+        }
+        // 其他参数忽略
     }
 }
 

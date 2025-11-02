@@ -86,7 +86,7 @@ gcc -o ftp_client \
 #### 启动服务器
 
 ```bash
-./ftp_server -p 2121  # 使用2121端口
+./ftp_server -port 2121 -root /Users/erix/Desktop/thu/tmp # 使用2121端口
 ```
 
 #### 启动客户端（新终端）
