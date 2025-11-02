@@ -11,6 +11,9 @@
 #include <unistd.h>
 #include <time.h>
 #include <pthread.h>
+#include <sys/stat.h>
+#include <limits.h>
+#include <errno.h>
 
 // 选择并打开一个 20000-65535 的监听端口（被动模式）
 static int open_pasv_listener(uint16_t *out_port, int *out_fd)
@@ -99,6 +102,77 @@ static void *xfer_thread(void *arg)
     conn->xfer_in_progress = 0;
     free(task);
     return NULL;
+}
+
+// 解析 CWD 参数为磁盘绝对路径，限制在 root_dir 内
+static int resolve_abs_path(ClientConn *conn, const char *arg, char *abs_path, size_t len)
+{
+    if (!conn || !arg || !abs_path || len == 0)
+        return -1;
+
+    // printf("[RESOLVE] root='%s' cwd='%s' raw='%s'\n", conn->root_dir, conn->current_dir, arg);
+
+    // trim
+    while (*arg == ' ' || *arg == '\t')
+        arg++;
+    size_t alen = strlen(arg);
+    while (alen > 0 && (arg[alen - 1] == ' ' || arg[alen - 1] == '\t' || arg[alen - 1] == '\r' || arg[alen - 1] == '\n'))
+        alen--;
+    if (alen == 0)
+        return -1;
+
+    char trimmed[PATH_MAX];
+    if (alen >= sizeof(trimmed))
+        return -1;
+    memcpy(trimmed, arg, alen);
+    trimmed[alen] = '\0';
+    // printf("[RESOLVE] trimmed='%s' (len=%zu)\n", trimmed, alen);
+
+    char tmp[PATH_MAX];
+    if (trimmed[0] == '/')
+    {
+        // 绝对路径：相对于 FTP 根目录（跳过前导'/'）
+        const char *rel = trimmed + 1;
+        if (rel[0] == '\0')
+        {
+            strncpy(tmp, conn->root_dir, sizeof(tmp) - 1);
+            tmp[sizeof(tmp) - 1] = '\0';
+            // printf("[RESOLVE] absolute to root -> '%s'\n", tmp);
+        }
+        else
+        {
+            // printf("[RESOLVE] absolute join: base='%s' rel='%s'\n", conn->root_dir, rel);
+            if (!utils_join_path(conn->root_dir, rel, tmp, sizeof(tmp)))
+            {
+                // printf("[RESOLVE] utils_join_path failed (abs): base='%s' rel='%s'\n", conn->root_dir, rel);
+                return -1;
+            }
+            // printf("[RESOLVE] joined(abs)='%s'\n", tmp);
+        }
+    }
+    else
+    {
+        // 相对路径：基于当前目录
+        // printf("[RESOLVE] relative join: base='%s' rel='%s'\n", conn->current_dir, trimmed);
+        if (!utils_join_path(conn->current_dir, trimmed, tmp, sizeof(tmp)))
+        {
+            // printf("[RESOLVE] utils_join_path failed (rel): base='%s' rel='%s'\n", conn->current_dir, trimmed);
+            return -1;
+        }
+        // printf("[RESOLVE] joined(rel)='%s'\n", tmp);
+    }
+
+    // 安全检查：目标必须在 root_dir 内
+    if (utils_check_path(conn->root_dir, tmp) == 0)
+    {
+        // printf("[RESOLVE] utils_check_path denied: root='%s' target='%s' \n", conn->root_dir, tmp);
+        return -1;
+    }
+
+    strncpy(abs_path, tmp, len - 1);
+    abs_path[len - 1] = '\0';
+    // printf("[RESOLVE] final='%s'\n", abs_path);
+    return 0;
 }
 
 static void cmd_handle_user(ClientConn *conn, const char *args)
@@ -257,6 +331,7 @@ static void cmd_handle_syst(ClientConn *conn, const char *args)
     (void)args;
     socket_send(conn->ctrl_fd, "215 UNIX Type: L8\r\n");
 }
+
 static void cmd_handle_type(ClientConn *conn, const char *args)
 {
     // 只接受 TYPE I，其它参数返回错误
@@ -396,6 +471,40 @@ static void cmd_handle_stor(ClientConn *conn, const char *args)
     pthread_detach(th);
 }
 
+static void cmd_handle_cwd(ClientConn *conn, const char *args)
+{
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+    if (!args || args[0] == '\0')
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+
+    // 解析目标路径合法性（不允许超出根目录）
+    char target[PATH_MAX];
+    if (resolve_abs_path(conn, args, target, sizeof(target)) != 0)
+    {
+        socket_send(conn->ctrl_fd, "550 Failed to change directory.\r\n");
+        return;
+    }
+
+    // 检查目标路径是否为真实存在的目录
+    struct stat st;
+    if (stat(target, &st) != 0 || !S_ISDIR(st.st_mode))
+    {
+        socket_send(conn->ctrl_fd, "550 Failed to change directory.\r\n");
+        return;
+    }
+
+    strncpy(conn->current_dir, target, sizeof(conn->current_dir) - 1);
+    conn->current_dir[sizeof(conn->current_dir) - 1] = '\0';
+    socket_send(conn->ctrl_fd, "250 Directory successfully changed.\r\n");
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -466,6 +575,11 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
     else if (strcmp(cmd, "STOR") == 0)
     {
         cmd_handle_stor(conn, args);
+        return;
+    }
+    else if (strcmp(cmd, "CWD") == 0)
+    {
+        cmd_handle_cwd(conn, args);
         return;
     }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");

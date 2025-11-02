@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 /**
- * 拼接根目录与相对路径，生成安全的绝对路径（防止路径越权）
+ * 拼接根目录与相对路径，生成绝对路径
  * @param root 根目录路径（如"/ftp_root"）
  * @param relative 相对路径（如"subdir/file.txt"）
  * @param result 输出拼接后的绝对路径缓冲区（需足够大）

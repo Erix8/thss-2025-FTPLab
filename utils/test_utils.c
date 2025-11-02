@@ -50,7 +50,7 @@ void test_utils_split_cmd()
 void test_utils_check_path()
 {
     // 测试用例1: 目标路径等于根目录
-    printf("Test 1: %d (预期1)\n", utils_check_path("/ftp_root", "/ftp_root"));
+    printf("Test 1: %d (预期1)\n", utils_check_path("/Users/erix/Desktop/thu/tmp", "/Users/erix/Desktop/thu/tmp/dmg"));
 
     // 测试用例2: 目标路径为根目录子文件
     printf("Test 2: %d (预期1)\n", utils_check_path("/ftp_root", "/ftp_root/file.txt"));
@@ -281,8 +281,8 @@ void test_parse_port_arg()
 int main()
 {
     // test_utils_split_cmd();
-    test_parse_port_arg();
-    // test_utils_check_path();
+    // test_parse_port_arg();
+    test_utils_check_path();
     // test_utils_join_path();
     return 0;
 }

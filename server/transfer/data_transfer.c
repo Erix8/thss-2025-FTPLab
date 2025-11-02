@@ -127,6 +127,9 @@ int transfer_send_file(ClientConn *conn, const char *filename)
     if (!utils_join_path(conn->current_dir, filename, path, sizeof(path)))
         return -1;
 
+    if (!utils_check_path(conn->root_dir, path))
+        return -1;
+
     int fd = open(path, O_RDONLY);
     if (fd < 0)
         return -1;
@@ -176,6 +179,8 @@ int transfer_recv_file(ClientConn *conn, const char *filename)
     char path[PATH_MAX];
     if (!utils_join_path(conn->current_dir, filename, path, sizeof(path)))
         return -1;
+    if (!utils_check_path(conn->root_dir, path))
+        return -1;
 
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0)
@@ -220,6 +225,10 @@ int transfer_recv_file(ClientConn *conn, const char *filename)
 int transfer_send_list(ClientConn *conn)
 {
     if (!conn || conn->data_fd < 0)
+        return -1;
+
+    // 防御性校验：当前工作目录必须在根内
+    if (utils_check_path(conn->root_dir, conn->current_dir) != 0)
         return -1;
 
     DIR *dir = opendir(conn->current_dir);
