@@ -361,7 +361,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
         if (FD_ISSET(listen_fd, &read_fds))
         {
             // 检查是否超过最大连接数限制
-            if (client_list->used >= (int)config->max_conn)
+            if (client_list->used >= config->max_conn)
             {
                 char client_ip[INET_ADDRSTRLEN];
                 int client_port;

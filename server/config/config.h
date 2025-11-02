@@ -8,7 +8,7 @@ typedef struct
 {
     int port;                // 监听端口（默认2121）
     char root_dir[PATH_MAX]; // FTP根目录（默认"./ftp_root"）
-    int max_conn;            // 最大连接数（默认10）
+    size_t max_conn;         // 最大连接数（默认10）
 } ServerConfig;
 
 // 初始化配置（解析命令行参数，设置默认值）
