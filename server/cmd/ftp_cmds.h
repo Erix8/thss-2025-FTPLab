@@ -6,7 +6,8 @@
 typedef enum
 {
     XFER_RETR,
-    XFER_STOR
+    XFER_STOR,
+    XFER_LIST
 } XferType;
 
 typedef struct
