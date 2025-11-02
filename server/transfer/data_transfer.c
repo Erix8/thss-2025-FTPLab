@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -228,31 +229,90 @@ int transfer_send_list(ClientConn *conn)
         return -1;
 
     // 防御性校验：当前工作目录必须在根内
-    if (utils_check_path(conn->root_dir, conn->current_dir) != 0)
+    if (!utils_check_path(conn->root_dir, conn->current_dir))
         return -1;
 
-    DIR *dir = opendir(conn->current_dir);
-    if (!dir)
+    // 通过子进程执行 /bin/ls -lA -- <current_dir>，父进程把输出转为 CRLF 并转发到数据连接
+    int pipefd[2];
+    if (pipe(pipefd) != 0)
         return -1;
-
-    char line[1024];
-    struct dirent *ent;
-    while ((ent = readdir(dir)) != NULL)
+    pid_t pid = fork();
+    if (pid < 0)
     {
-        const char *name = ent->d_name;
-        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-            continue;
-
-        // 简洁版 LIST：只输出名称
-        int n = snprintf(line, sizeof(line), "%s\r\n", name);
-        if (n > 0)
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+    if (pid == 0)
+    {
+        // child: 将 stdout/err 重定向到管道
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDERR_FILENO);
+        close(pipefd[1]);
+        // 不改变进程工作目录，直接传递目录参数，避免影响其他线程
+        execl("/bin/ls", "ls", "-lA", "--", conn->current_dir, (char *)NULL);
+        // 若 exec 失败，退出
+        _exit(127);
+    }
+    // parent
+    close(pipefd[1]);
+    char inbuf[8192];
+    char outbuf[16384]; // 预留 CRLF 扩展
+    ssize_t r;
+    while ((r = read(pipefd[0], inbuf, sizeof(inbuf))) > 0)
+    {
+        // 将 '\n' 转换为 "\r\n"
+        size_t oi = 0;
+        for (ssize_t i = 0; i < r; ++i)
         {
-            ssize_t w = write(conn->data_fd, line, (size_t)n);
-            (void)w;
+            if ((size_t)oi + 2 >= sizeof(outbuf))
+            {
+                // flush
+                ssize_t left = oi,
+                        off = 0;
+                while (left > 0)
+                {
+                    ssize_t w = write(conn->data_fd, outbuf + off, (size_t)left);
+                    if (w <= 0)
+                    {
+                        close(pipefd[0]);
+                        return -1;
+                    }
+                    off += w;
+                    left -= w;
+                }
+                oi = 0;
+            }
+            if (inbuf[i] == '\n')
+            {
+                outbuf[oi++] = '\r';
+                outbuf[oi++] = '\n';
+            }
+            else
+            {
+                outbuf[oi++] = inbuf[i];
+            }
+        }
+        // flush remaining
+        ssize_t left = oi,
+                off = 0;
+        while (left > 0)
+        {
+            ssize_t w = write(conn->data_fd, outbuf + off, (size_t)left);
+            if (w <= 0)
+            {
+                close(pipefd[0]);
+                return -1;
+            }
+            off += w;
+            left -= w;
         }
     }
-
-    closedir(dir);
+    close(pipefd[0]);
+    // 等待子进程结束
+    int status = 0;
+    (void)waitpid(pid, &status, 0);
     return 0;
 }
 

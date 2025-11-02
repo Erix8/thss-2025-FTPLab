@@ -82,7 +82,11 @@ static void *xfer_thread(void *arg)
     {
         rc = transfer_send_file(conn, task->filename);
     }
-    else
+    else if (task->type == XFER_LIST)
+    {
+        rc = transfer_send_list(conn);
+    }
+    else if (task->type == XFER_STOR)
     {
         rc = transfer_recv_file(conn, task->filename);
     }
@@ -96,8 +100,10 @@ static void *xfer_thread(void *arg)
     {
         if (task->type == XFER_RETR)
             socket_send(conn->ctrl_fd, "451 Requested action aborted: local error in processing.\r\n");
-        else
+        else if (task->type == XFER_STOR)
             socket_send(conn->ctrl_fd, "550 Failed to create or write file.\r\n");
+        else if (task->type == XFER_LIST)
+            socket_send(conn->ctrl_fd, "451 Requested action aborted: local error in processing.\r\n");
     }
     conn->xfer_in_progress = 0;
     free(task);
@@ -552,7 +558,6 @@ static void cmd_handle_pwd(ClientConn *conn, const char *args)
     socket_send(conn->ctrl_fd, line);
 }
 
-// MKD —— 创建目录
 static void cmd_handle_mkd(ClientConn *conn, const char *args)
 {
     if (conn->auth_state != AUTH_STATE_AUTHED)
@@ -761,6 +766,46 @@ static void cmd_handle_rmd(ClientConn *conn, const char *args)
     socket_send(conn->ctrl_fd, "250 Directory removed.\r\n");
 }
 
+static void cmd_handle_list(ClientConn *conn, const char *args)
+{
+    (void)args; // 本需求按“列出当前目录”处理，忽略参数
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+    if (conn->data_mode == DATA_MODE_NONE)
+    {
+        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.\r\n");
+        return;
+    }
+    if (conn->xfer_in_progress)
+    {
+        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.\r\n");
+        return;
+    }
+    XferTask *task = (XferTask *)malloc(sizeof(XferTask));
+    if (!task)
+    {
+        socket_send(conn->ctrl_fd, "451 Local error: out of memory.\r\n");
+        return;
+    }
+    task->conn = conn;
+    task->type = XFER_LIST;
+    task->filename[0] = '\0'; // LIST 无需文件名
+    conn->xfer_in_progress = 1;
+    pthread_t th;
+    if (pthread_create(&th, NULL, xfer_thread, task) != 0)
+
+    {
+        conn->xfer_in_progress = 0;
+        free(task);
+        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.\r\n");
+        return;
+    }
+    pthread_detach(th);
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -853,10 +898,10 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
         cmd_handle_rmd(conn, args);
         return;
     }
+    else if (strcmp(cmd, "LIST") == 0)
+    {
+        cmd_handle_list(conn, args);
+        return;
+    }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
 }
-
-// 以下为内部命令处理函数（仅在.c中实现，.h不暴露）
-// int cmd_handle_mkd(ClientConn* conn, const char* args);   // 处理MKD命令
-// int cmd_handle_rmd(ClientConn* conn, const char* args);   // 处理RMD命令
-// int cmd_handle_list(ClientConn* conn, const char* args);  // 处理LIST命令
