@@ -29,7 +29,8 @@ typedef struct
     int ctrl_fd;                     // 控制连接socket（-1表示空闲）
     int data_fd;                     // 数据连接socket
     AuthState auth_state;            // 认证状态
-    char current_dir[PATH_MAX];      // 当前工作目录（基于根目录）
+    char current_dir[PATH_MAX];      // 当前工作目录（绝对路径）
+    char root_dir[PATH_MAX];         // FTP服务器根目录（绝对路径）
     DataMode data_mode;              // 数据连接模式
     int pending_user_anon;           // 0: 未进入匿名登录流程；1: 已收到USER anonymous，等待PASS
     char data_host[INET_ADDRSTRLEN]; // 主动模式对端IP（来自PORT）

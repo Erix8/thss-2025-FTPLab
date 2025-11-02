@@ -251,7 +251,11 @@ void client_conn_init(ClientConn *conn, int ctrl_fd, const char *root_dir)
     conn->data_port = 0;
     conn->pasv_listen_fd = -1;
     conn->xfer_in_progress = 0;
-    strcpy(conn->current_dir, root_dir); // 初始目录为根目录
+    // 保存FTP根目录，并把当前目录初始化为根目录
+    strncpy(conn->root_dir, root_dir, sizeof(conn->root_dir) - 1);
+    conn->root_dir[sizeof(conn->root_dir) - 1] = '\0';
+    strncpy(conn->current_dir, root_dir, sizeof(conn->current_dir) - 1);
+    conn->current_dir[sizeof(conn->current_dir) - 1] = '\0';
 }
 
 // 处理单个客户端请求
