@@ -552,6 +552,120 @@ static void cmd_handle_pwd(ClientConn *conn, const char *args)
     socket_send(conn->ctrl_fd, line);
 }
 
+// MKD —— 创建目录
+static void cmd_handle_mkd(ClientConn *conn, const char *args)
+{
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+    if (!args || args[0] == '\0')
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+
+    // trim 参数前后空白
+    while (*args == ' ' || *args == '\t')
+        args++;
+    const char *end = args + strlen(args);
+    while (end > args && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n'))
+        end--;
+    if (end <= args)
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+    char trimmed[PATH_MAX];
+    size_t tlen = (size_t)(end - args);
+    if (tlen >= sizeof(trimmed))
+        tlen = sizeof(trimmed) - 1;
+    memcpy(trimmed, args, tlen);
+    trimmed[tlen] = '\0';
+
+    // 计算目标路径（绝对: 相对root；相对: 相对current）
+    char target[PATH_MAX];
+    if (trimmed[0] == '/')
+    {
+        const char *rel = trimmed + 1; // 去掉前导'/'
+        if (!utils_join_path(conn->root_dir, rel, target, sizeof(target)))
+        {
+            socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+            return;
+        }
+    }
+    else
+    {
+        if (!utils_join_path(conn->current_dir, trimmed, target, sizeof(target)))
+        {
+            socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+            return;
+        }
+    }
+
+    // 计算父目录，确保父目录存在且在 root 内
+    char parent[PATH_MAX];
+    strncpy(parent, target, sizeof(parent) - 1);
+    parent[sizeof(parent) - 1] = '\0';
+
+    // 去掉末尾的 '/'（若有）
+    size_t plen = strlen(parent);
+    while (plen > 1 && parent[plen - 1] == '/')
+    {
+        parent[--plen] = '\0';
+    }
+
+    // 定位父目录分隔符
+    char *slash = strrchr(parent, '/');
+    if (slash == NULL)
+    {
+        // 理论不该发生（绝对路径至少有一个前导'/'）
+        socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+        return;
+    }
+    if (slash == parent)
+    {
+        // 父目录就是根目录
+        parent[1] = '\0';
+        // 映射到实际磁盘根路径
+        strncpy(parent, conn->root_dir, sizeof(parent) - 1);
+        parent[sizeof(parent) - 1] = '\0';
+    }
+    else
+    {
+        // 截断到父目录
+        *slash = '\0';
+    } // 父目录安全与存在性校验
+    // 注意：此项目中 utils_check_path 在其他地方是用 "== 0 表示拒绝" 的约定，保持一致
+    if (utils_check_path(conn->root_dir, parent) == 0)
+    {
+        socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+        return;
+    }
+    struct stat pst;
+    if (stat(parent, &pst) != 0 || !S_ISDIR(pst.st_mode))
+    {
+        socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+        return;
+    }
+
+    // 创建目录
+    if (mkdir(target, 0755) != 0)
+    {
+        socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+        return;
+    }
+
+    // 成功：返回 257 "<显示路径>"
+    char disp[PATH_MAX];
+    to_ftp_display_path(conn, target, disp, sizeof(disp));
+
+    char line[PATH_MAX + 64];
+    snprintf(line, sizeof(line), "257 \"%s\"\r\n", disp);
+    socket_send(conn->ctrl_fd, line);
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -634,12 +748,15 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
         cmd_handle_pwd(conn, args);
         return;
     }
+    else if (strcmp(cmd, "MKD") == 0)
+    {
+        cmd_handle_mkd(conn, args);
+        return;
+    }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
 }
 
 // 以下为内部命令处理函数（仅在.c中实现，.h不暴露）
-// int cmd_handle_cwd(ClientConn* conn, const char* args);   // 处理CWD命令
-// int cmd_handle_pwd(ClientConn* conn, const char* args);   // 处理PWD命令
 // int cmd_handle_mkd(ClientConn* conn, const char* args);   // 处理MKD命令
 // int cmd_handle_rmd(ClientConn* conn, const char* args);   // 处理RMD命令
 // int cmd_handle_list(ClientConn* conn, const char* args);  // 处理LIST命令
