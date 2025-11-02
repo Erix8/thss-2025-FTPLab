@@ -175,6 +175,36 @@ static int resolve_abs_path(ClientConn *conn, const char *arg, char *abs_path, s
     return 0;
 }
 
+// 将绝对磁盘路径转换为 FTP 显示路径（相对 root_dir，根显示为 "/"）
+static void to_ftp_display_path(ClientConn *conn, const char *abs_path, char *out, size_t len)
+{
+    size_t rlen = strlen(conn->root_dir);
+    if (strncmp(abs_path, conn->root_dir, rlen) == 0)
+    {
+        const char *rel = abs_path + rlen;
+        if (*rel == '\0')
+        {
+            // 正好是根目录
+            strncpy(out, "/", len - 1);
+            out[len - 1] = '\0';
+        }
+        else
+        {
+            // 确保前面带一个 '/'
+            if (*rel != '/')
+                snprintf(out, len, "/%s", rel);
+            else
+                snprintf(out, len, "%s", rel);
+        }
+    }
+    else
+    {
+        // 兜底（不应出现）
+        strncpy(out, "/", len - 1);
+        out[len - 1] = '\0';
+    }
+}
+
 static void cmd_handle_user(ClientConn *conn, const char *args)
 {
     // 检查是否已认证
@@ -505,6 +535,23 @@ static void cmd_handle_cwd(ClientConn *conn, const char *args)
     socket_send(conn->ctrl_fd, "250 Directory successfully changed.\r\n");
 }
 
+static void cmd_handle_pwd(ClientConn *conn, const char *args)
+{
+    (void)args;
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+
+    char disp[PATH_MAX];
+    to_ftp_display_path(conn, conn->current_dir, disp, sizeof(disp));
+
+    char line[PATH_MAX + 32];
+    snprintf(line, sizeof(line), "257 \"%s\"\r\n", disp);
+    socket_send(conn->ctrl_fd, line);
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -580,6 +627,11 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
     else if (strcmp(cmd, "CWD") == 0)
     {
         cmd_handle_cwd(conn, args);
+        return;
+    }
+    else if (strcmp(cmd, "PWD") == 0)
+    {
+        cmd_handle_pwd(conn, args);
         return;
     }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
