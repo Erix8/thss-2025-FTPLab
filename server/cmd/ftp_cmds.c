@@ -666,6 +666,101 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
     socket_send(conn->ctrl_fd, line);
 }
 
+static void cmd_handle_rmd(ClientConn *conn, const char *args)
+{
+    if (conn->auth_state != AUTH_STATE_AUTHED)
+    {
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        return;
+    }
+    if (!args || args[0] == '\0')
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+
+    // trim 参数
+    while (*args == ' ' || *args == '\t')
+        args++;
+    const char *end = args + strlen(args);
+    while (end > args && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n'))
+        end--;
+    if (end <= args)
+    {
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        return;
+    }
+    char trimmed[PATH_MAX];
+    size_t tlen = (size_t)(end - args);
+    if (tlen >= sizeof(trimmed))
+        tlen = sizeof(trimmed) - 1;
+    memcpy(trimmed, args, tlen);
+    trimmed[tlen] = '\0';
+    // printf("[RMD] trimmed='%s'\n", trimmed);
+
+    // 解析目标路径（绝对: 相对 root；相对: 相对 current）
+    char target[PATH_MAX];
+    if (trimmed[0] == '/')
+    {
+        const char *rel = trimmed + 1; // 去掉前导 '/'
+        // printf("[RMD] join(abs): base='%s' rel='%s'\n", conn->root_dir, rel);
+        if (!utils_join_path(conn->root_dir, rel, target, sizeof(target)))
+        {
+            // printf("[RMD] join(abs) failed\n");
+            socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+            return;
+        }
+    }
+    else
+    {
+        // printf("[RMD] join(rel): base='%s' rel='%s'\n", conn->current_dir, trimmed);
+        if (!utils_join_path(conn->current_dir, trimmed, target, sizeof(target)))
+        {
+            // printf("[RMD] join(rel) failed\n");
+            socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+            return;
+        }
+    }
+    // printf("[RMD] target='%s'\n", target);
+
+    // printf("[RMD] check_path(root='%s', target='%s') => %d (0=deny)\n",
+    //        conn->root_dir, target, utils_check_path(conn->root_dir, target));
+    // 安全校验：必须在 root 内，且不能是根目录本身
+    if (utils_check_path(conn->root_dir, target) == 0)
+    {
+        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+        return;
+    }
+    if (strcmp(target, conn->root_dir) == 0)
+    {
+        socket_send(conn->ctrl_fd, "550 Cannot remove root directory.\r\n");
+        return;
+    }
+
+    // 必须存在且为目录
+    struct stat st;
+    if (stat(target, &st) != 0 || !S_ISDIR(st.st_mode))
+    {
+        // int se = errno;
+        // printf("[RMD] stat failed or not dir: path='%s' errno=%d (%s) is_dir=%d\n",
+        //        target, se, strerror(se), S_ISDIR(st.st_mode));
+        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+        return;
+    }
+
+    // 删除（要求为空目录）
+    if (rmdir(target) != 0)
+    {
+        // int re = errno;
+        // printf("[RMD] rmdir failed: path='%s' errno=%d (%s)\n",
+        //        target, re, strerror(re));
+        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+        return;
+    }
+
+    socket_send(conn->ctrl_fd, "250 Directory removed.\r\n");
+}
+
 /**
  * 处理客户端发送的命令行
  * @param conn 客户端连接信息结构体指针
@@ -751,6 +846,11 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
     else if (strcmp(cmd, "MKD") == 0)
     {
         cmd_handle_mkd(conn, args);
+        return;
+    }
+    else if (strcmp(cmd, "RMD") == 0)
+    {
+        cmd_handle_rmd(conn, args);
         return;
     }
     socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
