@@ -1,7 +1,7 @@
 # 一、编译产物（核心忽略项）
 # 可执行文件（服务器/客户端）
-ftp_server
-ftp_client
+server
+client
 # 目标文件（.o）
 *.o
 # 动态/静态库（若后续引入）
