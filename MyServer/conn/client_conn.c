@@ -40,14 +40,14 @@ ClientConnList *client_conn_list_init(size_t init_capacity)
     ClientConnList *list = malloc(sizeof(ClientConnList));
     if (!list)
     {
-        perror("malloc ClientConnList failed");
+        // perror("malloc ClientConnList failed");
         return NULL;
     }
     // 分配初始容量的客户端连接数组
     list->data = malloc(sizeof(ClientConn) * init_capacity);
     if (!list->data)
     {
-        perror("malloc ClientConn array failed");
+        // perror("malloc ClientConn array failed");
         free(list); // 回滚：释放已分配的结构体
         return NULL;
     }
@@ -79,7 +79,7 @@ static int client_conn_list_resize(ClientConnList *list, size_t new_capacity)
     ClientConn *new_data = realloc(list->data, sizeof(ClientConn) * new_capacity);
     if (!new_data)
     {
-        perror("realloc ClientConn array failed");
+        // perror("realloc ClientConn array failed");
         return -1;
     }
     // 初始化新增的槽位（空闲状态）
@@ -351,7 +351,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
         int activity = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
         if (activity < 0 && errno != EINTR)
         {
-            perror("select error");
+            // perror("select error");
             continue;
         }
 
@@ -380,7 +380,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
             int ctrl_fd = socket_accept(listen_fd, client_ip, &client_port);
             if (ctrl_fd == -1)
             {
-                perror("socket_accept failed");
+                // perror("socket_accept failed");
                 continue;
             }
 
