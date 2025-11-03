@@ -2,14 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-/**
- * 显示FTP客户端提示符（如"ftp> "）
- */
-void ui_show_prompt()
-{
-    printf("ftp> ");
-    fflush(stdout); // 确保提示符立即显示
-}
 
 /**
  * 读取用户输入的命令字符串
