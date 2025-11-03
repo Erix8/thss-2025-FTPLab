@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 /**
  * 拼接根目录与相对路径，生成绝对路径
