@@ -45,7 +45,7 @@ int socket_create_listen(int port)
         return -1;
     }
 
-    // printf("Server listening on port %d\n", port);
+    printf("Server listening on port %d\n", port);
     return listen_fd;
 }
 

@@ -1,6 +1,6 @@
 #include "client_conn.h"
 #include "../net/socket_utils.h"
-#include "../../utils/utils.h"
+#include "../utils/utils.h"
 #include "../cmd/ftp_cmds.h"
 #include <stdio.h>
 #include <string.h>
@@ -251,10 +251,8 @@ void client_conn_init(ClientConn *conn, int ctrl_fd, const char *root_dir)
     conn->pasv_listen_fd = -1;
     conn->xfer_in_progress = 0;
     // 保存FTP根目录，并把当前目录初始化为根目录
-    strncpy(conn->root_dir, root_dir, sizeof(conn->root_dir) - 1);
-    conn->root_dir[sizeof(conn->root_dir) - 1] = '\0';
-    strncpy(conn->current_dir, root_dir, sizeof(conn->current_dir) - 1);
-    conn->current_dir[sizeof(conn->current_dir) - 1] = '\0';
+    snprintf(conn->root_dir, sizeof(conn->root_dir), "%s", root_dir);
+    snprintf(conn->current_dir, sizeof(conn->current_dir), "%s", root_dir);
 }
 
 // 处理单个客户端请求
@@ -278,14 +276,14 @@ int handle_client_cmd(ClientConn *conn)
     char cmd[16], args[1024];
     if (utils_split_cmd(buf, cmd, sizeof(cmd), args, sizeof(args)) != 0)
     {
-        socket_send(conn->ctrl_fd, "500 Invalid command format.\r\n");
+        socket_send(conn->ctrl_fd, "500 Invalid command format.");
         return 0;
     }
 
     // 若为退出命令返回1，其余命令返回0
     if (strcmp(cmd, "QUIT") == 0)
     {
-        socket_send(conn->ctrl_fd, "221 Goodbye.\r\n");
+        socket_send(conn->ctrl_fd, "221 Goodbye.");
         return 1;
     }
     else
@@ -407,7 +405,7 @@ void conn_manager_run(int listen_fd, const ServerConfig *config)
             }
 
             // 发送欢迎信息
-            socket_send(ctrl_fd, "220 Anonymous FTP server ready.\r\n");
+            socket_send(ctrl_fd, "220 Anonymous FTP server ready.");
             // printf("New connection from %s:%d (used: %zu/%zu)\n",
             //        client_ip, client_port, client_list->used, client_list->capacity);
         }

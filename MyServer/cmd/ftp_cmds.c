@@ -1,6 +1,6 @@
 #include "ftp_cmds.h"
 #include "../net/socket_utils.h"
-#include "../../utils/utils.h"
+#include "../utils/utils.h"
 #include "../transfer/data_transfer.h"
 #include <string.h>
 #include <stdlib.h>
@@ -68,11 +68,11 @@ static void *xfer_thread(void *arg)
     XferTask *task = (XferTask *)arg;
     ClientConn *conn = task->conn;
     // 标记响应 150
-    socket_send(conn->ctrl_fd, "150 Opening data connection.\r\n");
+    socket_send(conn->ctrl_fd, "150 Opening data connection.");
     // 建立数据连接（PORT 主动 connect / PASV accept）
     if (transfer_init_data_conn(conn) != 0)
     {
-        socket_send(conn->ctrl_fd, "425 Can't open data connection.\r\n");
+        socket_send(conn->ctrl_fd, "425 Can't open data connection.");
         conn->xfer_in_progress = 0;
         free(task);
         return NULL;
@@ -94,16 +94,16 @@ static void *xfer_thread(void *arg)
     transfer_close_data_conn(conn);
     if (rc == 0)
     {
-        socket_send(conn->ctrl_fd, "226 Transfer complete.\r\n");
+        socket_send(conn->ctrl_fd, "226 Transfer complete.");
     }
     else
     {
         if (task->type == XFER_RETR)
-            socket_send(conn->ctrl_fd, "451 Requested action aborted: local error in processing.\r\n");
+            socket_send(conn->ctrl_fd, "451 Requested action aborted: local error in processing.");
         else if (task->type == XFER_STOR)
-            socket_send(conn->ctrl_fd, "550 Failed to create or write file.\r\n");
+            socket_send(conn->ctrl_fd, "550 Failed to create or write file.");
         else if (task->type == XFER_LIST)
-            socket_send(conn->ctrl_fd, "451 Requested action aborted: local error in processing.\r\n");
+            socket_send(conn->ctrl_fd, "451 Requested action aborted: local error in processing.");
     }
     conn->xfer_in_progress = 0;
     free(task);
@@ -141,8 +141,7 @@ static int resolve_abs_path(ClientConn *conn, const char *arg, char *abs_path, s
         const char *rel = trimmed + 1;
         if (rel[0] == '\0')
         {
-            strncpy(tmp, conn->root_dir, sizeof(tmp) - 1);
-            tmp[sizeof(tmp) - 1] = '\0';
+            snprintf(tmp, sizeof(tmp), "%s", conn->root_dir);
             // printf("[RESOLVE] absolute to root -> '%s'\n", tmp);
         }
         else
@@ -174,9 +173,7 @@ static int resolve_abs_path(ClientConn *conn, const char *arg, char *abs_path, s
         // printf("[RESOLVE] utils_check_path denied: root='%s' target='%s' \n", conn->root_dir, tmp);
         return -1;
     }
-
-    strncpy(abs_path, tmp, len - 1);
-    abs_path[len - 1] = '\0';
+    snprintf(abs_path, len, "%s", tmp);
     // printf("[RESOLVE] final='%s'\n", abs_path);
     return 0;
 }
@@ -191,8 +188,7 @@ static void to_ftp_display_path(ClientConn *conn, const char *abs_path, char *ou
         if (*rel == '\0')
         {
             // 正好是根目录
-            strncpy(out, "/", len - 1);
-            out[len - 1] = '\0';
+            snprintf(out, len, "/");
         }
         else
         {
@@ -206,8 +202,7 @@ static void to_ftp_display_path(ClientConn *conn, const char *abs_path, char *ou
     else
     {
         // 兜底（不应出现）
-        strncpy(out, "/", len - 1);
-        out[len - 1] = '\0';
+        snprintf(out, len, "/");
     }
 }
 
@@ -216,20 +211,20 @@ static void cmd_handle_user(ClientConn *conn, const char *args)
     // 检查是否已认证
     if (conn->auth_state == AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "503 Already logged in.\r\n");
+        socket_send(conn->ctrl_fd, "503 Already logged in.");
         return;
     }
 
     // 验证用户名是否为anonymous
     if (args == NULL || strcmp(args, "anonymous") != 0)
     {
-        socket_send(conn->ctrl_fd, "530 Only anonymous login supported.\r\n");
+        socket_send(conn->ctrl_fd, "530 Only anonymous login supported.");
         return;
     }
 
-    // 接受匿名用户，提示输入密码(邮箱)
+    // 接受匿名用户，提示输入密码
     conn->pending_user_anon = 1;
-    socket_send(conn->ctrl_fd, "331 Please specify the password (email address).\r\n");
+    socket_send(conn->ctrl_fd, "331 Please specify the password.");
     return;
 }
 
@@ -238,27 +233,27 @@ static void cmd_handle_pass(ClientConn *conn, const char *args)
     // 检查认证状态
     if (conn->auth_state == AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "230 Already logged in.\r\n");
+        socket_send(conn->ctrl_fd, "230 Already logged in.");
         return;
     }
 
     // 简单验证密码不为空(实际匿名登录通常不严格验证邮箱格式)
     if (!conn->pending_user_anon)
     {
-        socket_send(conn->ctrl_fd, "503 Login with USER anonymous first.\r\n");
+        socket_send(conn->ctrl_fd, "503 Login with USER anonymous first.");
         return;
     }
 
     if (args == NULL || strlen(args) == 0)
     {
-        socket_send(conn->ctrl_fd, "501 Password required (email address).\r\n");
+        socket_send(conn->ctrl_fd, "501 Password required.");
         return;
     }
 
     // 标记为已认证并发送成功消息
     conn->auth_state = AUTH_STATE_AUTHED;
     conn->pending_user_anon = 0;
-    socket_send(conn->ctrl_fd, "230 Login successful.\r\n");
+    socket_send(conn->ctrl_fd, "230 Login successful.");
     return;
 }
 
@@ -266,7 +261,7 @@ static void cmd_handle_port(ClientConn *conn, const char *args)
 {
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
 
@@ -274,7 +269,7 @@ static void cmd_handle_port(ClientConn *conn, const char *args)
     uint16_t port = 0;
     if (parse_port_arg(args, ip, sizeof(ip), &port) != 0)
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
 
@@ -295,12 +290,11 @@ static void cmd_handle_port(ClientConn *conn, const char *args)
 
     // 切换到主动模式，保存目标
     conn->data_mode = DATA_MODE_PORT;
-    strncpy(conn->data_host, ip, sizeof(conn->data_host) - 1);
-    conn->data_host[sizeof(conn->data_host) - 1] = '\0';
+    snprintf(conn->data_host, sizeof(conn->data_host), "%s", ip);
     conn->data_port = port;
 
     // 确认
-    socket_send(conn->ctrl_fd, "200 PORT command successful.\r\n");
+    socket_send(conn->ctrl_fd, "200 PORT command successful.");
 }
 
 static void cmd_handle_pasv(ClientConn *conn, const char *args)
@@ -308,7 +302,7 @@ static void cmd_handle_pasv(ClientConn *conn, const char *args)
     (void)args;
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
 
@@ -329,7 +323,7 @@ static void cmd_handle_pasv(ClientConn *conn, const char *args)
     int pasv_fd = -1;
     if (open_pasv_listener(&pasv_port, &pasv_fd) != 0)
     {
-        socket_send(conn->ctrl_fd, "425 Can't open passive connection.\r\n");
+        socket_send(conn->ctrl_fd, "425 Can't open passive connection.");
         return;
     }
 
@@ -340,7 +334,7 @@ static void cmd_handle_pasv(ClientConn *conn, const char *args)
     if (getsockname(conn->ctrl_fd, (struct sockaddr *)&local, &llen) != 0)
     {
         socket_close(pasv_fd);
-        socket_send(conn->ctrl_fd, "425 Can't determine server address.\r\n");
+        socket_send(conn->ctrl_fd, "425 Can't determine server address.");
         return;
     }
 
@@ -358,14 +352,14 @@ static void cmd_handle_pasv(ClientConn *conn, const char *args)
 
     // 返回 227（按建议格式：前面带 '='）
     char resp[128];
-    snprintf(resp, sizeof(resp), "227 =%u,%u,%u,%u,%u,%u\r\n", h1, h2, h3, h4, p1, p2);
+    snprintf(resp, sizeof(resp), "227 =%u,%u,%u,%u,%u,%u", h1, h2, h3, h4, p1, p2);
     socket_send(conn->ctrl_fd, resp);
 }
 
 static void cmd_handle_syst(ClientConn *conn, const char *args)
 {
     (void)args;
-    socket_send(conn->ctrl_fd, "215 UNIX Type: L8\r\n");
+    socket_send(conn->ctrl_fd, "215 UNIX Type: L8");
 }
 
 static void cmd_handle_type(ClientConn *conn, const char *args)
@@ -373,7 +367,7 @@ static void cmd_handle_type(ClientConn *conn, const char *args)
     // 只接受 TYPE I，其它参数返回错误
     if (!args)
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
 
@@ -387,7 +381,7 @@ static void cmd_handle_type(ClientConn *conn, const char *args)
     // 空参数 -> 501
     if (end <= args)
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
 
@@ -406,58 +400,57 @@ static void cmd_handle_type(ClientConn *conn, const char *args)
 
     if (strcasecmp(param, "I") == 0)
     {
-        socket_send(conn->ctrl_fd, "200 Type set to I.\r\n");
+        socket_send(conn->ctrl_fd, "200 Type set to I.");
         return;
     }
 
     // 不支持的 TYPE 参数
-    socket_send(conn->ctrl_fd, "504 Command not implemented for that parameter.\r\n");
+    socket_send(conn->ctrl_fd, "504 Command not implemented for that parameter.");
 }
 
 static void cmd_handle_retr(ClientConn *conn, const char *args)
 {
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
     // 必须先 PORT 或 PASV
     if (conn->data_mode == DATA_MODE_NONE)
     {
-        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.\r\n");
+        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.");
         return;
     }
     // 参数检查
     if (!args || args[0] == '\0')
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
     if (conn->xfer_in_progress)
     {
         // 已有传输在进行，直接忽略或提示忙
-        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.\r\n");
+        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.");
         return;
     }
     // 启动传输线程
     XferTask *task = (XferTask *)malloc(sizeof(XferTask));
     if (!task)
     {
-        socket_send(conn->ctrl_fd, "451 Local error: out of memory.\r\n");
+        socket_send(conn->ctrl_fd, "451 Local error: out of memory.");
         return;
     }
     task->conn = conn;
     task->type = XFER_RETR;
     // 保存文件名（由 data_transfer 内部做路径拼接与限制）
-    strncpy(task->filename, args, sizeof(task->filename) - 1);
-    task->filename[sizeof(task->filename) - 1] = '\0';
+    snprintf(task->filename, sizeof(task->filename), "%s", args);
     conn->xfer_in_progress = 1;
     pthread_t th;
     if (pthread_create(&th, NULL, xfer_thread, task) != 0)
     {
         conn->xfer_in_progress = 0;
         free(task);
-        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.\r\n");
+        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.");
         return;
     }
     pthread_detach(th);
@@ -467,41 +460,40 @@ static void cmd_handle_stor(ClientConn *conn, const char *args)
 {
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
     if (conn->data_mode == DATA_MODE_NONE)
     {
-        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.\r\n");
+        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.");
         return;
     }
     if (!args || args[0] == '\0')
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
     if (conn->xfer_in_progress)
     {
-        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.\r\n");
+        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.");
         return;
     }
     XferTask *task = (XferTask *)malloc(sizeof(XferTask));
     if (!task)
     {
-        socket_send(conn->ctrl_fd, "451 Local error: out of memory.\r\n");
+        socket_send(conn->ctrl_fd, "451 Local error: out of memory.");
         return;
     }
     task->conn = conn;
     task->type = XFER_STOR;
-    strncpy(task->filename, args, sizeof(task->filename) - 1);
-    task->filename[sizeof(task->filename) - 1] = '\0';
+    snprintf(task->filename, sizeof(task->filename), "%s", args);
     conn->xfer_in_progress = 1;
     pthread_t th;
     if (pthread_create(&th, NULL, xfer_thread, task) != 0)
     {
         conn->xfer_in_progress = 0;
         free(task);
-        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.\r\n");
+        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.");
         return;
     }
     pthread_detach(th);
@@ -511,12 +503,12 @@ static void cmd_handle_cwd(ClientConn *conn, const char *args)
 {
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
     if (!args || args[0] == '\0')
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
 
@@ -524,7 +516,7 @@ static void cmd_handle_cwd(ClientConn *conn, const char *args)
     char target[PATH_MAX];
     if (resolve_abs_path(conn, args, target, sizeof(target)) != 0)
     {
-        socket_send(conn->ctrl_fd, "550 Failed to change directory.\r\n");
+        socket_send(conn->ctrl_fd, "550 Failed to change directory.");
         return;
     }
 
@@ -532,13 +524,11 @@ static void cmd_handle_cwd(ClientConn *conn, const char *args)
     struct stat st;
     if (stat(target, &st) != 0 || !S_ISDIR(st.st_mode))
     {
-        socket_send(conn->ctrl_fd, "550 Failed to change directory.\r\n");
+        socket_send(conn->ctrl_fd, "550 Failed to change directory.");
         return;
     }
-
-    strncpy(conn->current_dir, target, sizeof(conn->current_dir) - 1);
-    conn->current_dir[sizeof(conn->current_dir) - 1] = '\0';
-    socket_send(conn->ctrl_fd, "250 Directory successfully changed.\r\n");
+    snprintf(conn->current_dir, sizeof(conn->current_dir), "%s", target);
+    socket_send(conn->ctrl_fd, "250 Directory successfully changed.");
 }
 
 static void cmd_handle_pwd(ClientConn *conn, const char *args)
@@ -546,7 +536,7 @@ static void cmd_handle_pwd(ClientConn *conn, const char *args)
     (void)args;
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
 
@@ -554,7 +544,7 @@ static void cmd_handle_pwd(ClientConn *conn, const char *args)
     to_ftp_display_path(conn, conn->current_dir, disp, sizeof(disp));
 
     char line[PATH_MAX + 32];
-    snprintf(line, sizeof(line), "257 \"%s\"\r\n", disp);
+    snprintf(line, sizeof(line), "257 \"%s\"", disp);
     socket_send(conn->ctrl_fd, line);
 }
 
@@ -562,12 +552,12 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
 {
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
     if (!args || args[0] == '\0')
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
 
@@ -579,7 +569,7 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
         end--;
     if (end <= args)
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
     char trimmed[PATH_MAX];
@@ -596,7 +586,7 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
         const char *rel = trimmed + 1; // 去掉前导'/'
         if (!utils_join_path(conn->root_dir, rel, target, sizeof(target)))
         {
-            socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+            socket_send(conn->ctrl_fd, "550 Create directory operation failed.");
             return;
         }
     }
@@ -604,15 +594,14 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
     {
         if (!utils_join_path(conn->current_dir, trimmed, target, sizeof(target)))
         {
-            socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+            socket_send(conn->ctrl_fd, "550 Create directory operation failed.");
             return;
         }
     }
 
     // 计算父目录，确保父目录存在且在 root 内
     char parent[PATH_MAX];
-    strncpy(parent, target, sizeof(parent) - 1);
-    parent[sizeof(parent) - 1] = '\0';
+    snprintf(parent, sizeof(parent), "%s", target);
 
     // 去掉末尾的 '/'（若有）
     size_t plen = strlen(parent);
@@ -626,7 +615,7 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
     if (slash == NULL)
     {
         // 理论不该发生（绝对路径至少有一个前导'/'）
-        socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+        socket_send(conn->ctrl_fd, "550 Create directory operation failed.");
         return;
     }
     if (slash == parent)
@@ -634,8 +623,7 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
         // 父目录就是根目录
         parent[1] = '\0';
         // 映射到实际磁盘根路径
-        strncpy(parent, conn->root_dir, sizeof(parent) - 1);
-        parent[sizeof(parent) - 1] = '\0';
+        snprintf(parent, sizeof(parent), "%s", conn->root_dir);
     }
     else
     {
@@ -645,20 +633,20 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
     // 注意：此项目中 utils_check_path 在其他地方是用 "== 0 表示拒绝" 的约定，保持一致
     if (utils_check_path(conn->root_dir, parent) == 0)
     {
-        socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+        socket_send(conn->ctrl_fd, "550 Create directory operation failed.");
         return;
     }
     struct stat pst;
     if (stat(parent, &pst) != 0 || !S_ISDIR(pst.st_mode))
     {
-        socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+        socket_send(conn->ctrl_fd, "550 Create directory operation failed.");
         return;
     }
 
     // 创建目录
     if (mkdir(target, 0755) != 0)
     {
-        socket_send(conn->ctrl_fd, "550 Create directory operation failed.\r\n");
+        socket_send(conn->ctrl_fd, "550 Create directory operation failed.");
         return;
     }
 
@@ -667,7 +655,7 @@ static void cmd_handle_mkd(ClientConn *conn, const char *args)
     to_ftp_display_path(conn, target, disp, sizeof(disp));
 
     char line[PATH_MAX + 64];
-    snprintf(line, sizeof(line), "257 \"%s\"\r\n", disp);
+    snprintf(line, sizeof(line), "257 \"%s\"", disp);
     socket_send(conn->ctrl_fd, line);
 }
 
@@ -675,12 +663,12 @@ static void cmd_handle_rmd(ClientConn *conn, const char *args)
 {
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
     if (!args || args[0] == '\0')
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
 
@@ -692,7 +680,7 @@ static void cmd_handle_rmd(ClientConn *conn, const char *args)
         end--;
     if (end <= args)
     {
-        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.\r\n");
+        socket_send(conn->ctrl_fd, "501 Syntax error in parameters or arguments.");
         return;
     }
     char trimmed[PATH_MAX];
@@ -712,7 +700,7 @@ static void cmd_handle_rmd(ClientConn *conn, const char *args)
         if (!utils_join_path(conn->root_dir, rel, target, sizeof(target)))
         {
             // printf("[RMD] join(abs) failed\n");
-            socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+            socket_send(conn->ctrl_fd, "550 Remove directory operation failed.");
             return;
         }
     }
@@ -722,7 +710,7 @@ static void cmd_handle_rmd(ClientConn *conn, const char *args)
         if (!utils_join_path(conn->current_dir, trimmed, target, sizeof(target)))
         {
             // printf("[RMD] join(rel) failed\n");
-            socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+            socket_send(conn->ctrl_fd, "550 Remove directory operation failed.");
             return;
         }
     }
@@ -733,12 +721,12 @@ static void cmd_handle_rmd(ClientConn *conn, const char *args)
     // 安全校验：必须在 root 内，且不能是根目录本身
     if (utils_check_path(conn->root_dir, target) == 0)
     {
-        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.");
         return;
     }
     if (strcmp(target, conn->root_dir) == 0)
     {
-        socket_send(conn->ctrl_fd, "550 Cannot remove root directory.\r\n");
+        socket_send(conn->ctrl_fd, "550 Cannot remove root directory.");
         return;
     }
 
@@ -749,7 +737,7 @@ static void cmd_handle_rmd(ClientConn *conn, const char *args)
         // int se = errno;
         // printf("[RMD] stat failed or not dir: path='%s' errno=%d (%s) is_dir=%d\n",
         //        target, se, strerror(se), S_ISDIR(st.st_mode));
-        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.");
         return;
     }
 
@@ -759,11 +747,11 @@ static void cmd_handle_rmd(ClientConn *conn, const char *args)
         // int re = errno;
         // printf("[RMD] rmdir failed: path='%s' errno=%d (%s)\n",
         //        target, re, strerror(re));
-        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.\r\n");
+        socket_send(conn->ctrl_fd, "550 Remove directory operation failed.");
         return;
     }
 
-    socket_send(conn->ctrl_fd, "250 Directory removed.\r\n");
+    socket_send(conn->ctrl_fd, "250 Directory removed.");
 }
 
 static void cmd_handle_list(ClientConn *conn, const char *args)
@@ -771,23 +759,23 @@ static void cmd_handle_list(ClientConn *conn, const char *args)
     (void)args; // 本需求按“列出当前目录”处理，忽略参数
     if (conn->auth_state != AUTH_STATE_AUTHED)
     {
-        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER and PASS.");
         return;
     }
     if (conn->data_mode == DATA_MODE_NONE)
     {
-        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.\r\n");
+        socket_send(conn->ctrl_fd, "425 Use PORT or PASV first.");
         return;
     }
     if (conn->xfer_in_progress)
     {
-        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.\r\n");
+        socket_send(conn->ctrl_fd, "450 Another transfer is in progress.");
         return;
     }
     XferTask *task = (XferTask *)malloc(sizeof(XferTask));
     if (!task)
     {
-        socket_send(conn->ctrl_fd, "451 Local error: out of memory.\r\n");
+        socket_send(conn->ctrl_fd, "451 Local error: out of memory.");
         return;
     }
     task->conn = conn;
@@ -800,7 +788,7 @@ static void cmd_handle_list(ClientConn *conn, const char *args)
     {
         conn->xfer_in_progress = 0;
         free(task);
-        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.\r\n");
+        socket_send(conn->ctrl_fd, "451 Local error: cannot start transfer.");
         return;
     }
     pthread_detach(th);
@@ -817,7 +805,7 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
     if (!conn || !cmd)
     {
         if (conn)
-            socket_send(conn->ctrl_fd, "500 Internal error.\r\n");
+            socket_send(conn->ctrl_fd, "500 Internal error.");
         return;
     }
 
@@ -830,7 +818,7 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
             return;
         }
         // 其他命令一律不合法
-        socket_send(conn->ctrl_fd, "530 Please login with USER anonymous.\r\n");
+        socket_send(conn->ctrl_fd, "530 Please login with USER anonymous.");
         return;
     }
 
@@ -843,7 +831,7 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
             return;
         }
         // USER 在该阶段关闭，始终提示 PASS 验证
-        socket_send(conn->ctrl_fd, "331 User accepted, send PASS (email address).\r\n");
+        socket_send(conn->ctrl_fd, "331 User accepted, send PASS (email address).");
         return;
     }
 
@@ -903,5 +891,5 @@ void cmd_process(ClientConn *conn, const char *cmd, const char *args)
         cmd_handle_list(conn, args);
         return;
     }
-    socket_send(conn->ctrl_fd, "502 Command not implemented.\r\n");
+    socket_send(conn->ctrl_fd, "502 Command not implemented.");
 }
