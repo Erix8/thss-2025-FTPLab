@@ -8,7 +8,7 @@ typedef enum
     CLIENT_STATE_AUTHED
 } ClientState;
 
-// 处理用户输入的命令（如"get"→转为RETR，返回0成功）
+// 处理用户输入的命令
 int client_handle_input(int ctrl_fd, ClientState *state, const char *input);
 
 #endif

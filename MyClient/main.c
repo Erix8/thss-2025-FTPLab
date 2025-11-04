@@ -7,38 +7,11 @@
 
 int main(int argc, char *argv[])
 {
-    // 默认参数
-    char ip[64] = "127.0.0.1";
-    int port = 21;
-
-    // 解析命令行参数：-ip IPaddress -port n
-    for (int i = 1; i < argc; ++i)
+    char ip[64];
+    int port = 0;
+    if (ui_parse_args(argc, argv, ip, sizeof(ip), &port) != 0)
     {
-        if (strcmp(argv[i], "-ip") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                ui_print_msg("Usage: ./client [-ip IPaddress] [-port n]");
-                return 1;
-            }
-            snprintf(ip, sizeof(ip), "%s", argv[i + 1]);
-            i++;
-        }
-        else if (strcmp(argv[i], "-port") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                ui_print_msg("Usage: ./client [-ip IPaddress] [-port n]");
-                return 1;
-            }
-            port = atoi(argv[i + 1]);
-            i++;
-        }
-        else
-        {
-            ui_print_msg("Usage: ./client [-ip IPaddress] [-port n]");
-            return 1;
-        }
+        return 1;
     }
 
     // 连接服务器

@@ -1,20 +1,12 @@
 #include "client_transfer.h"
-
-/**
- * 用PORT模式建立数据连接
- * @param ctrl_fd 控制连接文件描述符
- * @param local_ip 本地IP地址（用于告知服务器）
- * @return 成功返回数据连接文件描述符，失败返回-1
- */
-int transfer_setup_port(int ctrl_fd, const char *local_ip);
-
-/**
- * 用PASV模式建立数据连接
- * @param ctrl_fd 控制连接文件描述符
- * @param server_ip 服务器IP地址
- * @return 成功返回数据连接文件描述符，失败返回-1
- */
-int transfer_setup_pasv(int ctrl_fd, const char *server_ip);
+#include "../net/client_socket.h"
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /**
  * 从数据连接接收文件并保存到本地
