@@ -29,7 +29,7 @@ $(OBJDIR)/%.o: %.c
 -include $(DEPS)
 
 clean:
-	rm -rf $(OBJDIR) *.d
+	rm -rf $(OBJDIR) *.d $(TARGET)
 
 distclean: clean
 	rm -f $(TARGET)
