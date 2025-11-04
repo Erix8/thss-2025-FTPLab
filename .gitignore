@@ -46,8 +46,8 @@ DerivedData/
 
 # 五、FTP 运行时数据（如根目录下的测试文件）
 # 注意：若 ftp_root 是代码仓库内的空目录，可创建 ftp_root/.gitkeep 保留目录结构
-server/ftp_root/*
-!server/ftp_root/.gitkeep  # 例外：保留 .gitkeep 以确保目录被跟踪
+MyServer/tmp
+!MyServer/tmp/.gitkeep  # 例外：保留 .gitkeep 以确保目录被跟踪
 
 # 六、日志/配置文件（若运行时生成）
 *.log
