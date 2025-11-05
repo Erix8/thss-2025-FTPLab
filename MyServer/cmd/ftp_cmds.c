@@ -352,7 +352,7 @@ static void cmd_handle_pasv(ClientConn *conn, const char *args)
 
     // 返回 227（按建议格式：前面带 '='）
     char resp[128];
-    snprintf(resp, sizeof(resp), "227 =%u,%u,%u,%u,%u,%u", h1, h2, h3, h4, p1, p2);
+    snprintf(resp, sizeof(resp), "227 Entering Passive Mode (%u,%u,%u,%u,%u,%u)", h1, h2, h3, h4, p1, p2);
     socket_send(conn->ctrl_fd, resp);
 }
 

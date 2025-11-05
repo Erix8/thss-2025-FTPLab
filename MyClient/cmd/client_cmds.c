@@ -3,6 +3,7 @@
 #include "../ui/ui_utils.h"
 #include "../utils/utils.h"
 #include <string.h>
+#include <stdio.h>
 
 /**
  * 初始化客户端结构体
@@ -17,6 +18,57 @@ void client_init(Client *client)
         client->state = CLIENT_STATE_UNAUTH;
         client->data_mode = DATA_MODE_NONE;
     }
+}
+/**
+ * 处理PASV命令, 进入被动模式,
+ * 保存服务器传送来的数据连接信息，存储在data_fd中
+ * @param client 指向Client结构体的指针
+ * @param args 命令参数字符串
+ * @return 0表示成功，非0表示失败
+ */
+static void client_handle_pasv(Client *client)
+{
+    if (!client)
+        return;
+
+    char resp[1024];
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive PASV response.");
+        return;
+    }
+    ui_print_msg(resp);
+
+    // 解析PASV响应，提取IP和端口
+    const char *p = strchr(resp, '(');
+    const char *q = strchr(resp, ')');
+    if (!p || !q || p >= q)
+    {
+        ui_print_msg("Invalid PASV response format.");
+        return;
+    }
+
+    int h1, h2, h3, h4, p1, p2;
+    if (sscanf(p + 1, "%d,%d,%d,%d,%d,%d", &h1, &h2, &h3, &h4, &p1, &p2) != 6)
+    {
+        ui_print_msg("Failed to parse PASV response.");
+        return;
+    }
+
+    char ip[64];
+    snprintf(ip, sizeof(ip), "%d.%d.%d.%d", h1, h2, h3, h4);
+    uint16_t port = (uint16_t)(p1 * 256 + p2);
+
+    // 建立数据连接
+    int data_fd = client_connect(ip, port);
+    if (data_fd == -1)
+    {
+        ui_print_msg("Failed to connect to PASV data port.");
+        return;
+    }
+
+    client->data_mode = DATA_MODE_PASV;
+    client->data_fd = data_fd;
 }
 
 /**
@@ -37,8 +89,11 @@ int client_handle_input(Client *client, const char *input)
         return 0;
     }
 
+    client_send_cmd(client->ctrl_fd, input);
+
     if (strcmp(cmd, "PASV") == 0)
     {
+        client_handle_pasv(client);
         return 0;
     }
     else if (strcmp(cmd, "PORT") == 0)
@@ -59,10 +114,13 @@ int client_handle_input(Client *client, const char *input)
     }
     else
     {
-        // 其他一般指令直接传送给服务器
-        client_send_cmd(client->ctrl_fd, input);
+        // 其他一般指令
         char resp[1024];
-        client_recv_resp(client->ctrl_fd, resp, sizeof(resp));
+        if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+        {
+            ui_print_msg("Failed to receive response.");
+            return -1;
+        }
         ui_print_msg(resp);
         if (strcmp(cmd, "QUIT") == 0)
             return 1; // 退出标志
