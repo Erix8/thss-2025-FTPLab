@@ -33,8 +33,10 @@ int main(int argc, char *argv[])
         if (input == NULL)
             break; // 用户输入exit或Ctrl+C
         // 处理命令
-        client_handle_input(ctrl_fd, &state, input);
+        int should_exit = client_handle_input(ctrl_fd, &state, input);
         free(input);
+        if (should_exit)
+            break;
     }
     // 断开连接
     client_disconnect(ctrl_fd);

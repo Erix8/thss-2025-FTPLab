@@ -1,6 +1,7 @@
 #include "client_cmds.h"
 #include "../net/client_socket.h"
 #include "../ui/ui_utils.h"
+#include "../utils/utils.h"
 #include <string.h>
 /**
  * 处理用户输入的客户端命令（转换为FTP协议命令）
@@ -14,13 +15,9 @@ int client_handle_input(int ctrl_fd, ClientState *state, const char *input)
     if (!input || !state)
         return -1;
 
-    // 处理退出命令
-    if (strcmp(input, "exit") == 0 || strcmp(input, "quit") == 0)
+    char cmd[16], args[1024];
+    if (utils_split_cmd(input, cmd, sizeof(cmd), args, sizeof(args)) != 0)
     {
-        client_send_cmd(ctrl_fd, "QUIT");
-        char resp[1024];
-        client_recv_resp(ctrl_fd, resp, sizeof(resp));
-        ui_print_msg(resp);
         return 0;
     }
 
@@ -32,16 +29,15 @@ int client_handle_input(int ctrl_fd, ClientState *state, const char *input)
     int code = client_recv_resp(ctrl_fd, resp, sizeof(resp));
     if (code == -1)
     {
-        ui_print_msg("Failed to receive response");
+        // ui_print_msg("Failed to receive response");
         return -1;
     }
 
     ui_print_msg(resp);
 
-    // 更新认证状态
-    if (code == 230)
-    { // 230表示登录成功
-        *state = CLIENT_STATE_AUTHED;
+    if (strcmp(cmd, "QUIT") == 0 && code == 221)
+    {
+        return 1; // 退出标志
     }
     return 0;
 }
