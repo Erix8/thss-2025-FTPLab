@@ -8,7 +8,7 @@
  * @param ctrl_fd 控制连接文件描述符
  * @param state 客户端当前认证状态指针（可能被更新）
  * @param input 用户输入的命令字符串
- * @return 0表示处理成功，非0表示处理失败
+ * @return 0表示处理成功，1表示退出，-1表示错误
  */
 int client_handle_input(int ctrl_fd, ClientState *state, const char *input)
 {
@@ -21,23 +21,35 @@ int client_handle_input(int ctrl_fd, ClientState *state, const char *input)
         return 0;
     }
 
-    // 发送用户输入的命令到服务器（直接透传）
-    client_send_cmd(ctrl_fd, input);
-
-    // 接收服务器响应
-    char resp[1024];
-    int code = client_recv_resp(ctrl_fd, resp, sizeof(resp));
-    if (code == -1)
+    if (strcmp(cmd, "PASV") == 0)
     {
-        // ui_print_msg("Failed to receive response");
-        return -1;
+        return 0;
     }
-
-    ui_print_msg(resp);
-
-    if (strcmp(cmd, "QUIT") == 0 && code == 221)
+    else if (strcmp(cmd, "PORT") == 0)
     {
-        return 1; // 退出标志
+        return 0;
     }
-    return 0;
+    else if (strcmp(cmd, "RETR") == 0)
+    {
+        return 0;
+    }
+    else if (strcmp(cmd, "STOR") == 0)
+    {
+        return 0;
+    }
+    else if (strcmp(cmd, "LIST") == 0)
+    {
+        return 0;
+    }
+    else
+    {
+        // 其他一般指令直接传送给服务器
+        client_send_cmd(ctrl_fd, input);
+        char resp[1024];
+        client_recv_resp(ctrl_fd, resp, sizeof(resp));
+        ui_print_msg(resp);
+        if (strcmp(cmd, "QUIT") == 0)
+            return 1; // 退出标志
+        return 0;
+    }
 }

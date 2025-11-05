@@ -13,7 +13,6 @@ int main(int argc, char *argv[])
     {
         return 1;
     }
-
     // 连接服务器
     int ctrl_fd = client_connect(ip, port);
     if (ctrl_fd == -1)
@@ -35,8 +34,13 @@ int main(int argc, char *argv[])
         // 处理命令
         int should_exit = client_handle_input(ctrl_fd, &state, input);
         free(input);
-        if (should_exit)
+        if (should_exit == 1)
             break;
+        else if (should_exit == -1)
+        {
+            // ui_print_msg("Error processing command.");
+            return 1;
+        }
     }
     // 断开连接
     client_disconnect(ctrl_fd);
