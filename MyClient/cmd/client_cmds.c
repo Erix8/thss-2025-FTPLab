@@ -4,6 +4,11 @@
 #include "../utils/utils.h"
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <stdlib.h>
+#include <errno.h>
 
 /**
  * 初始化客户端结构体
@@ -72,6 +77,49 @@ static void client_handle_pasv(Client *client)
 }
 
 /**
+ * 处理PORT命令, 进入主动模式,
+ * 在本地指定IP:port上监听，等待服务器连接回连
+ * @param client 指向Client结构体的指针
+ * @param args 命令参数字符串
+ */
+static void client_handle_port(Client *client, char *args)
+{
+    if (!client || !args)
+        return;
+
+    // 解析PORT命令参数
+    int h1, h2, h3, h4, p1, p2;
+    if (sscanf(args, "%d,%d,%d,%d,%d,%d", &h1, &h2, &h3, &h4, &p1, &p2) != 6)
+    {
+        ui_print_msg("Invalid PORT command arguments.");
+        return;
+    }
+
+    char ip[64];
+    snprintf(ip, sizeof(ip), "%d.%d.%d.%d", h1, h2, h3, h4);
+    uint16_t port = (uint16_t)(p1 * 256 + p2);
+
+    // 在主动模式（PORT）中，客户端应在本地指定的IP:port上监听，等待服务器连接回连。
+    int lfd = client_listen_port(ip, port);
+    if (lfd < 0)
+    {
+        ui_print_msg("Failed to create listening socket for PORT mode.");
+        return;
+    }
+
+    char resp[1024];
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive PORT response.");
+        return;
+    }
+    ui_print_msg(resp);
+
+    client->data_mode = DATA_MODE_PORT;
+    client->data_fd = lfd; // 保存监听fd，后续数据传输时需 accept
+}
+
+/**
  * 处理用户输入的客户端命令（转换为FTP协议命令）
  * @param ctrl_fd 控制连接文件描述符
  * @param state 客户端当前认证状态指针（可能被更新）
@@ -98,6 +146,7 @@ int client_handle_input(Client *client, const char *input)
     }
     else if (strcmp(cmd, "PORT") == 0)
     {
+        client_handle_port(client, args);
         return 0;
     }
     else if (strcmp(cmd, "RETR") == 0)

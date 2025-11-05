@@ -1,9 +1,13 @@
 #include "client_socket.h"
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 /**
  * 连接到FTP服务器并建立控制连接
  * @param server_ip 服务器IP地址字符串
@@ -84,4 +88,49 @@ int client_recv_resp(int ctrl_fd, char *resp_buf, size_t buf_len)
 void client_disconnect(int ctrl_fd)
 {
     close(ctrl_fd);
+}
+
+// 在本地指定 IP:port 上创建监听 socket（用于主动 PORT 模式）
+// 返回监听 socket 的 fd（>=0），失败返回 -1
+int client_listen_port(const char *local_ip, uint16_t port)
+{
+    if (!local_ip)
+        return -1;
+
+    int lfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (lfd < 0)
+    {
+        return -1;
+    }
+
+    int opt = 1;
+    if (setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        close(lfd);
+        return -1;
+    }
+
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(port);
+    if (inet_pton(AF_INET, local_ip, &sa.sin_addr) != 1)
+    {
+        close(lfd);
+        return -1;
+    }
+
+    if (bind(lfd, (struct sockaddr *)&sa, sizeof(sa)) < 0)
+    {
+        close(lfd);
+        return -1;
+    }
+
+    if (listen(lfd, 1) < 0)
+    {
+        close(lfd);
+        return -1;
+    }
+
+    return lfd;
 }
