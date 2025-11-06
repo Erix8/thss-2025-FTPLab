@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h> // getcwd
-#include <limits.h> // PATH_MAX
+#include <unistd.h>         // getcwd
+#include <limits.h>         // PATH_MAX
+#include <sys/stat.h>       // stat, S_ISDIR
+#include "../utils/utils.h" // utils_join_path
 
 /**
  * 初始化服务器配置（解析命令行参数并设置默认值）
@@ -54,23 +56,25 @@ void config_init(int argc, char *argv[], ServerConfig *config)
                 char cwd[PATH_MAX];
                 if (getcwd(cwd, sizeof(cwd)) != NULL)
                 {
-                    char combined[PATH_MAX];
-                    size_t cwd_len = strlen(cwd);
-                    size_t arg_len = strlen(arg_path);
-                    if (cwd_len + 1 + arg_len >= sizeof(combined))
+                    char joined[PATH_MAX];
+                    // 使用 utils_join_path 安全地拼接 CWD 和相对路径
+                    if (utils_join_path(cwd, arg_path, joined, sizeof(joined)) != NULL)
                     {
-                        snprintf(config->root_dir, sizeof(config->root_dir), "%s", arg_path);
-                    }
-                    // 拼接 CWD 和相对路径
-                    snprintf(combined, sizeof(combined), "%s/%s", cwd, arg_path);
-                    if (realpath(combined, resolved) != NULL)
-                    {
-                        snprintf(config->root_dir, sizeof(config->root_dir), "%s", resolved);
+                        // 优先尝试规范化为真实路径（若存在）
+                        if (realpath(joined, resolved) != NULL)
+                        {
+                            snprintf(config->root_dir, sizeof(config->root_dir), "%s", resolved);
+                        }
+                        else
+                        {
+                            // realpath 失败（可能路径尚不存在），使用拼接结果
+                            snprintf(config->root_dir, sizeof(config->root_dir), "%s", joined);
+                        }
                     }
                     else
                     {
-                        // realpath 失败（可能路径尚不存在），使用拼接结果
-                        snprintf(config->root_dir, sizeof(config->root_dir), "%s", combined);
+                        // 拼接失败，退回原始相对路径
+                        snprintf(config->root_dir, sizeof(config->root_dir), "%s", arg_path);
                     }
                 }
                 else
@@ -100,6 +104,29 @@ int config_validate(ServerConfig *config)
         // fprintf(stderr, "Invalid port: %d\n", config->port);
         return 1;
     }
-    // 其他校验（如根目录存在性）暂略
+    // 校验根目录合法性：非空、存在、为目录、可读可进入
+    if (config->root_dir[0] == '\0')
+    {
+        // fprintf(stderr, "Root dir is empty.\n");
+        return 2;
+    }
+
+    struct stat st;
+    if (stat(config->root_dir, &st) != 0)
+    {
+        // fprintf(stderr, "Root dir does not exist: %s\n", config->root_dir);
+        return 2;
+    }
+    if (!S_ISDIR(st.st_mode))
+    {
+        // fprintf(stderr, "Root path is not a directory: %s\n", config->root_dir);
+        return 3;
+    }
+    // 需要具备读和执行权限（进入目录）
+    if (access(config->root_dir, R_OK | X_OK) != 0)
+    {
+        // fprintf(stderr, "Root dir is not accessible: %s\n", config->root_dir);
+        return 4;
+    }
     return 0;
 }
