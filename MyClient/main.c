@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
     }
 
     // 处理服务器欢迎信息
-    char resp[1024];
+    char resp[8192];
     client_recv_resp(client.ctrl_fd, resp, sizeof(resp));
     ui_print_msg(resp);
 

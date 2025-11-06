@@ -1,5 +1,6 @@
 #include "client_cmds.h"
 #include "../net/client_socket.h"
+#include "../transfer/client_transfer.h"
 #include "../ui/ui_utils.h"
 #include "../utils/utils.h"
 #include <string.h>
@@ -36,7 +37,7 @@ static void client_handle_pasv(Client *client)
     if (!client)
         return;
 
-    char resp[1024];
+    char resp[8192];
     if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
     {
         ui_print_msg("Failed to receive PASV response.");
@@ -87,7 +88,7 @@ static void client_handle_port(Client *client, char *args)
     if (!client || !args)
         return;
 
-    char resp[1024];
+    char resp[8192];
     if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
     {
         ui_print_msg("Failed to receive PORT response.");
@@ -98,11 +99,7 @@ static void client_handle_port(Client *client, char *args)
     // 解析PORT命令参数
     int h1, h2, h3, h4, p1, p2;
     if (sscanf(args, "%d,%d,%d,%d,%d,%d", &h1, &h2, &h3, &h4, &p1, &p2) != 6)
-    {
-        ui_print_msg("Invalid PORT command arguments.");
         return;
-    }
-
     char ip[64];
     snprintf(ip, sizeof(ip), "%d.%d.%d.%d", h1, h2, h3, h4);
     uint16_t port = (uint16_t)(p1 * 256 + p2);
@@ -117,6 +114,62 @@ static void client_handle_port(Client *client, char *args)
 
     client->data_mode = DATA_MODE_PORT;
     client->data_fd = lfd; // 保存监听fd，后续数据传输时需 accept
+}
+
+static void client_handle_list(Client *client)
+{
+    if (!client)
+        return;
+
+    char resp[8192];
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive response.");
+        return;
+    }
+    ui_print_msg(resp);
+
+    // 根据数据连接模式，建立数据连接
+    int data_fd = -1;
+    if (client->data_mode == DATA_MODE_PASV)
+    {
+        data_fd = client->data_fd; // 已经在PASV处理中建立
+    }
+    else if (client->data_mode == DATA_MODE_PORT)
+    {
+        // 在PORT模式下，接受服务器的连接
+        struct sockaddr_in server_addr;
+        socklen_t addr_len = sizeof(server_addr);
+        data_fd = accept(client->data_fd, (struct sockaddr *)&server_addr, &addr_len);
+        if (data_fd < 0)
+        {
+            ui_print_msg("Failed to accept data connection in PORT mode.");
+            return;
+        }
+    }
+    else
+    {
+        ui_print_msg("Data connection mode not set.");
+        return;
+    }
+
+    // 接收目录列表
+    if (transfer_recv_list(data_fd, NULL, 1) != 0)
+    {
+        ui_print_msg("Failed to receive directory listing.");
+    }
+
+    memset(resp, 0, sizeof(resp));
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive final response.");
+    }
+    ui_print_msg(resp);
+
+    // 关闭数据连接
+    transfer_close_data_conn(data_fd);
+    client->data_fd = -1;
+    client->data_mode = DATA_MODE_NONE;
 }
 
 /**
@@ -159,12 +212,13 @@ int client_handle_input(Client *client, const char *input)
     }
     else if (strcmp(cmd, "LIST") == 0)
     {
+        client_handle_list(client);
         return 0;
     }
     else
     {
         // 其他一般指令
-        char resp[1024];
+        char resp[8192];
         if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
         {
             ui_print_msg("Failed to receive response.");
