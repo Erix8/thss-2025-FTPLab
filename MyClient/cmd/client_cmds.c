@@ -311,8 +311,16 @@ static void client_handle_stor(Client *client, const char *args)
         return;
     }
 
+    char *filename;
+    if (strrchr(args, '/'))
+    {
+        filename = strrchr(args, '/');
+        filename++; // 跳过最后的'/'
+    }
+    else
+        filename = (char *)args;
     // 发送文件（本地参数即为文件路径/名）
-    if (transfer_send_file(data_fd, args) != 0)
+    if (transfer_send_file(data_fd, filename) != 0)
     {
         ui_print_msg("Failed to send file.");
     }
