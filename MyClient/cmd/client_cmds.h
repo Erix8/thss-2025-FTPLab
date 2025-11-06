@@ -1,13 +1,6 @@
 #ifndef CLIENT_CMDS_H
 #define CLIENT_CMDS_H
 
-// 客户端状态（是否已认证）
-typedef enum
-{
-    CLIENT_STATE_UNAUTH,
-    CLIENT_STATE_AUTHED
-} ClientState;
-
 // 数据连接模式
 typedef enum
 {
@@ -20,7 +13,6 @@ typedef struct
 {
     int ctrl_fd;        // 控制连接文件描述符
     int data_fd;        // 数据连接文件描述符
-    ClientState state;  // 客户端当前状态
     DataMode data_mode; // 数据连接模式
 } Client;
 

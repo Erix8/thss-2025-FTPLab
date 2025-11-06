@@ -21,7 +21,6 @@ void client_init(Client *client)
     {
         client->ctrl_fd = -1;
         client->data_fd = -1;
-        client->state = CLIENT_STATE_UNAUTH;
         client->data_mode = DATA_MODE_NONE;
     }
 }
@@ -40,9 +39,12 @@ static void client_handle_pasv(Client *client)
     // 若已有数据连接或监听，先关闭，避免泄漏
     if (client->data_fd >= 0)
     {
-        close(client->data_fd);
+        transfer_close_data_conn(client->data_fd);
         client->data_fd = -1;
     }
+
+    // 发送 PASV 命令
+    client_send_cmd(client->ctrl_fd, "PASV");
 
     char resp[8192];
     if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
@@ -106,7 +108,7 @@ static void client_handle_port(Client *client, char *args)
     // 若已有数据连接或监听，先关闭，避免泄漏
     if (client->data_fd >= 0)
     {
-        close(client->data_fd);
+        transfer_close_data_conn(client->data_fd);
         client->data_fd = -1;
     }
 
@@ -139,6 +141,11 @@ static void client_handle_retr(Client *client, const char *args)
 {
     if (!client || !args)
         return;
+
+    // 发送 RETR 命令
+    char cmdline[1024];
+    snprintf(cmdline, sizeof(cmdline), "RETR %s", args);
+    client_send_cmd(client->ctrl_fd, cmdline);
 
     char resp[8192];
     if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
@@ -205,6 +212,11 @@ static void client_handle_list(Client *client)
     if (!client)
         return;
 
+    // 发送 LIST 命令
+    char cmdline[1024];
+    snprintf(cmdline, sizeof(cmdline), "LIST");
+    client_send_cmd(client->ctrl_fd, cmdline);
+
     char resp[8192];
     if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
     {
@@ -256,6 +268,85 @@ static void client_handle_list(Client *client)
     client->data_mode = DATA_MODE_NONE;
 }
 
+// 处理 STOR 命令：发送命令、建立/接受数据连接、上传文件、接收完成响应
+static void client_handle_stor(Client *client, const char *args)
+{
+    if (!client || !args)
+        return;
+
+    // 发送 STOR 命令
+    char cmdline[1024];
+    snprintf(cmdline, sizeof(cmdline), "STOR %s", args);
+    client_send_cmd(client->ctrl_fd, cmdline);
+
+    char resp[8192];
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive STOR response.");
+        return;
+    }
+    ui_print_msg(resp);
+
+    // 根据数据连接模式，建立数据连接
+    int data_fd = -1;
+    if (client->data_mode == DATA_MODE_PASV)
+    {
+        data_fd = client->data_fd; // 已经在PASV处理中建立
+    }
+    else if (client->data_mode == DATA_MODE_PORT)
+    {
+        // 在PORT模式下，接受服务器的连接
+        struct sockaddr_in server_addr;
+        socklen_t addr_len = sizeof(server_addr);
+        data_fd = accept(client->data_fd, (struct sockaddr *)&server_addr, &addr_len);
+        if (data_fd < 0)
+        {
+            ui_print_msg("Failed to accept data connection in PORT mode.");
+            return;
+        }
+    }
+    else
+    {
+        ui_print_msg("Data connection mode not set.");
+        return;
+    }
+
+    // 发送文件（本地参数即为文件路径/名）
+    if (transfer_send_file(data_fd, args) != 0)
+    {
+        ui_print_msg("Failed to send file.");
+    }
+
+    // 先关闭数据连接，通知服务器传输结束（STOR 需要客户端先关闭数据连接，服务端才会发送226）
+    transfer_close_data_conn(data_fd);
+    client->data_fd = -1;
+
+    // 再接收最终响应
+    memset(resp, 0, sizeof(resp));
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive final response.");
+    }
+    ui_print_msg(resp);
+
+    client->data_mode = DATA_MODE_NONE;
+}
+
+// 通用命令处理：发送原始输入并打印响应
+static void client_handle_generic(Client *client, const char *input)
+{
+    if (!client || !input)
+        return;
+    char resp[8192];
+    client_send_cmd(client->ctrl_fd, input);
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive response.");
+        return;
+    }
+    ui_print_msg(resp);
+}
+
 /**
  * 处理用户输入的客户端命令（转换为FTP协议命令）
  * @param ctrl_fd 控制连接文件描述符
@@ -276,7 +367,6 @@ int client_handle_input(Client *client, const char *input)
 
     if (strcmp(cmd, "PASV") == 0)
     {
-        client_send_cmd(client->ctrl_fd, input);
         client_handle_pasv(client);
         return 0;
     }
@@ -287,32 +377,23 @@ int client_handle_input(Client *client, const char *input)
     }
     else if (strcmp(cmd, "RETR") == 0)
     {
-        client_send_cmd(client->ctrl_fd, input);
         client_handle_retr(client, args);
         return 0;
     }
     else if (strcmp(cmd, "STOR") == 0)
     {
-        client_send_cmd(client->ctrl_fd, input);
+        client_handle_stor(client, args);
         return 0;
     }
     else if (strcmp(cmd, "LIST") == 0)
     {
-        client_send_cmd(client->ctrl_fd, input);
         client_handle_list(client);
         return 0;
     }
     else
     {
         // 其他一般指令
-        char resp[8192];
-        client_send_cmd(client->ctrl_fd, input);
-        if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
-        {
-            ui_print_msg("Failed to receive response.");
-            return -1;
-        }
-        ui_print_msg(resp);
+        client_handle_generic(client, input);
         if (strcmp(cmd, "QUIT") == 0)
             return 1; // 退出标志
         return 0;
