@@ -116,6 +116,71 @@ static void client_handle_port(Client *client, char *args)
     client->data_fd = lfd; // 保存监听fd，后续数据传输时需 accept
 }
 
+static void client_handle_retr(Client *client, const char *args)
+{
+    if (!client || !args)
+        return;
+
+    char resp[8192];
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive RETR response.");
+        return;
+    }
+    ui_print_msg(resp);
+
+    // 根据数据连接模式，建立数据连接
+    int data_fd = -1;
+    if (client->data_mode == DATA_MODE_PASV)
+    {
+        data_fd = client->data_fd; // 已经在PASV处理中建立
+    }
+    else if (client->data_mode == DATA_MODE_PORT)
+    {
+        // 在PORT模式下，接受服务器的连接
+        struct sockaddr_in server_addr;
+        socklen_t addr_len = sizeof(server_addr);
+        data_fd = accept(client->data_fd, (struct sockaddr *)&server_addr, &addr_len);
+        if (data_fd < 0)
+        {
+            ui_print_msg("Failed to accept data connection in PORT mode.");
+            return;
+        }
+    }
+    else
+    {
+        ui_print_msg("Data connection mode not set.");
+        return;
+    }
+
+    char *filename;
+    if (strrchr(args, '/'))
+    {
+        filename = strrchr(args, '/');
+        filename++; // 跳过最后的'/'
+    }
+    else
+        filename = (char *)args;
+
+    // 接收文件
+    if (transfer_recv_file(data_fd, filename) != 0)
+    {
+        ui_print_msg("Failed to receive file.");
+    }
+
+    memset(resp, 0, sizeof(resp));
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive final response.");
+    }
+    ui_print_msg(resp);
+
+    // 关闭数据连接
+    transfer_close_data_conn(data_fd);
+    client->data_fd = -1;
+    client->data_mode = DATA_MODE_NONE;
+}
+
 static void client_handle_list(Client *client)
 {
     if (!client)
@@ -204,6 +269,7 @@ int client_handle_input(Client *client, const char *input)
     }
     else if (strcmp(cmd, "RETR") == 0)
     {
+        client_handle_retr(client, args);
         return 0;
     }
     else if (strcmp(cmd, "STOR") == 0)
