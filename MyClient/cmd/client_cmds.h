@@ -16,6 +16,7 @@ typedef struct
     DataMode data_mode; // 数据连接模式
 } Client;
 
+// 初始化客户端结构体
 void client_init(Client *client);
 
 // 处理用户输入的命令

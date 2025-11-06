@@ -6,24 +6,6 @@
 #include <stdint.h>
 
 /**
- * 拼接根目录与相对路径，生成绝对路径
- * @param root 根目录路径（如"/ftp_root"）
- * @param relative 相对路径（如"subdir/file.txt"）
- * @param result 输出拼接后的绝对路径缓冲区（需足够大）
- * @param result_len 输出缓冲区的大小（包含终止符 \0，建议用 PATH_MAX）
- * @return 指向result的指针，失败返回NULL
- */
-char *utils_join_path(const char *root, const char *relative, char *result, size_t result_len);
-
-/**
- * 检查目标路径是否在根目录范围内（防止通过../越权访问）
- * @param root 根目录路径（如"/ftp_root"）
- * @param target 待检查的目标路径（绝对路径）
- * @return 1表示合法（在根目录内），0表示非法（越权访问）
- */
-int utils_check_path(const char *root, const char *target);
-
-/**
  * 分割命令行字符串为命令和参数
  * @param cmd_line 完整命令行（如"RETR file.txt"）
  * @param cmd 输出命令缓冲区（至少16字节）
@@ -43,5 +25,16 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
  * @return 0：成功；-1：参数无效或格式错误
  */
 int parse_port_arg(const char *args, char *ip_buf, size_t ip_len, uint16_t *port_out);
+
+/**
+ * 解析命令行参数：支持 -ip IPaddress 与 -port n；未指定使用默认值
+ * @param argc 参数个数
+ * @param argv 参数字符串数组
+ * @param ip_out 输出IP地址缓冲区
+ * @param ip_len 输出IP地址缓冲区长度
+ * @param port_out 输出端口号指针
+ * @return 0：成功；非0：失败
+ */
+int ui_parse_args(int argc, char *argv[], char *ip_out, size_t ip_len, int *port_out);
 
 #endif

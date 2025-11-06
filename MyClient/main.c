@@ -1,6 +1,7 @@
 #include "net/client_socket.h"
 #include "ui/ui_utils.h"
 #include "cmd/client_cmds.h"
+#include "utils/utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

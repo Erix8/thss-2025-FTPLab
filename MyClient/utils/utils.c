@@ -44,122 +44,6 @@ int parse_port_arg(const char *args, char *ip_buf, size_t ip_len, uint16_t *port
 }
 
 /**
- * 拼接根目录与相对路径，生成绝对路径
- * @param root 根目录路径（如"/ftp_root"）
- * @param relative 相对路径（如"subdir/file.txt"）
- * @param result 输出拼接后的绝对路径缓冲区（需足够大）
- * @param result_len 输出缓冲区的大小（包含终止符 \0，建议用 PATH_MAX）
- * @return 指向result的指针，失败返回NULL
- */
-char *utils_join_path(const char *root, const char *relative, char *result, size_t result_len)
-{
-    // 检查参数是否合格，路径不能为空
-    if (!root || !relative || !result)
-        return NULL;
-
-    // 临时缓冲区存储拼接后的原始路径
-    char temp[PATH_MAX];
-    if (snprintf(temp, sizeof(temp), "%s/%s", root, relative) >= (int)sizeof(temp))
-        return NULL; // 路径过长
-
-    // 规范化路径（处理.和..）
-    char normalized[PATH_MAX];
-    char *p = temp;
-    char *q = normalized;
-    char *start = normalized;
-
-    *q++ = '/';
-    while (*p == '/')
-        p++;
-
-    while (*p)
-    {
-        while (*p == '/')
-            p++;
-        // 到达temp结尾
-        if (!*p)
-            break;
-
-        // 处理当前目录.
-        if (*p == '.' && (*(p + 1) == '\0' || *(p + 1) == '/'))
-        {
-            p += (*(p + 1) == '/') ? 2 : 1;
-            continue;
-        }
-
-        // 处理上级目录..
-        if (*p == '.' && *(p + 1) != '\0' && *(p + 1) == '.' && (*(p + 2) == '\0' || *(p + 2) == '/'))
-        {
-            // 如果已经在 root（仅有开头的 '/'），则越权
-            if (q == start + 1)
-            {
-                return NULL; // 越权，拒绝
-            }
-            // 回退到上一个目录分隔符
-            q--;
-            while (q > start + 1 && *q != '/')
-                q--;
-            p += (*(p + 2) == '/') ? 3 : 2;
-            continue;
-        }
-
-        // 复制当前目录名
-        if (q != start + 1)
-            *q++ = '/';
-        while (*p && *p != '/')
-        {
-            if ((size_t)(q - start) >= (PATH_MAX - 1))
-                return NULL; // 太长
-            *q++ = *p++;
-        }
-    }
-
-    // 移除末尾多余斜杠（根目录"/"除外），首部斜杠需要保留
-    if (q > start + 1 && *(q - 1) == '/')
-        q--; // 仅当路径长度 > 1 时才移除末尾斜杠
-    *q = '\0';
-
-    if (strlen(normalized) >= result_len)
-        return NULL;
-    strncpy(result, normalized, result_len - 1);
-    result[result_len - 1] = '\0';
-    return result;
-}
-
-/**
- * 检查目标路径是否在根目录范围内（防止通过../越权访问）
- * @param root 根目录路径（如"/ftp_root"）
- * @param target 待检查的目标路径（绝对路径）
- * @return 1表示合法（在根目录内），0表示非法（越权访问）
- */
-int utils_check_path(const char *root, const char *target)
-{
-    // 检验参数是否合格
-    if (!root || !target)
-        return 0;
-
-    size_t root_len = strlen(root);
-    size_t target_len = strlen(target);
-
-    // 目标路径长度必须大于等于根目录长度
-    if (target_len < root_len)
-        return 0;
-
-    // 检查前缀是否匹配
-    if (strncmp(root, target, root_len) != 0)
-        return 0;
-
-    // 根目录是整个路径或后续为路径分隔符
-    if (target_len == root_len)
-        return 1;
-    // 根目录后紧跟路径分隔符或根目录本身就是根路径"/"
-    if (target[root_len] == '/' || (root_len == 1 && root[0] == '/'))
-        return 1;
-
-    return 0;
-}
-
-/**
  * 分割命令行字符串为命令和参数两部分
  * @param cmd_line 完整命令行（如"RETR file.txt"）
  * @param cmd 输出命令缓冲区（至少16字节）
@@ -215,6 +99,58 @@ int utils_split_cmd(const char *cmd_line, char *cmd, size_t cmd_len, char *args,
     // 限制参数最大长度1023，留一个字节给终止符
     strncpy(args, p, args_len - 1);
     args[args_len - 1] = '\0';
+
+    return 0;
+}
+
+/**
+ * 解析命令行参数：支持 -ip IPaddress 与 -port n；未指定使用默认
+ * 成功返回0，失败返回非0
+ */
+int ui_parse_args(int argc, char *argv[], char *ip_out, size_t ip_len, int *port_out)
+{
+    if (!ip_out || ip_len == 0 || !port_out)
+        return -1;
+
+    // 默认值
+    snprintf(ip_out, ip_len, "%s", "127.0.0.1");
+    *port_out = 21;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        if (strcmp(argv[i], "-ip") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                return -1;
+            }
+            snprintf(ip_out, ip_len, "%s", argv[i + 1]);
+            i++;
+        }
+        else if (strcmp(argv[i], "-port") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                return -1;
+            }
+            char *endp = NULL;
+            long p = strtol(argv[i + 1], &endp, 10);
+            if (endp && *endp != '\0')
+            {
+                return -1;
+            }
+            if (p <= 0 || p > 65535)
+            {
+                return -1;
+            }
+            *port_out = (int)p;
+            i++;
+        }
+        else
+        {
+            return -1;
+        }
+    }
 
     return 0;
 }
