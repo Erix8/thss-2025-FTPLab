@@ -87,6 +87,14 @@ static void client_handle_port(Client *client, char *args)
     if (!client || !args)
         return;
 
+    char resp[1024];
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive PORT response.");
+        return;
+    }
+    ui_print_msg(resp);
+
     // 解析PORT命令参数
     int h1, h2, h3, h4, p1, p2;
     if (sscanf(args, "%d,%d,%d,%d,%d,%d", &h1, &h2, &h3, &h4, &p1, &p2) != 6)
@@ -106,14 +114,6 @@ static void client_handle_port(Client *client, char *args)
         ui_print_msg("Failed to create listening socket for PORT mode.");
         return;
     }
-
-    char resp[1024];
-    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
-    {
-        ui_print_msg("Failed to receive PORT response.");
-        return;
-    }
-    ui_print_msg(resp);
 
     client->data_mode = DATA_MODE_PORT;
     client->data_fd = lfd; // 保存监听fd，后续数据传输时需 accept
