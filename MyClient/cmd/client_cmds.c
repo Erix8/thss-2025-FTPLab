@@ -37,6 +37,13 @@ static void client_handle_pasv(Client *client)
     if (!client)
         return;
 
+    // 若已有数据连接或监听，先关闭，避免泄漏
+    if (client->data_fd >= 0)
+    {
+        close(client->data_fd);
+        client->data_fd = -1;
+    }
+
     char resp[8192];
     if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
     {
@@ -88,14 +95,6 @@ static void client_handle_port(Client *client, char *args)
     if (!client || !args)
         return;
 
-    char resp[8192];
-    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
-    {
-        ui_print_msg("Failed to receive PORT response.");
-        return;
-    }
-    ui_print_msg(resp);
-
     // 解析PORT命令参数
     int h1, h2, h3, h4, p1, p2;
     if (sscanf(args, "%d,%d,%d,%d,%d,%d", &h1, &h2, &h3, &h4, &p1, &p2) != 6)
@@ -103,6 +102,13 @@ static void client_handle_port(Client *client, char *args)
     char ip[64];
     snprintf(ip, sizeof(ip), "%d.%d.%d.%d", h1, h2, h3, h4);
     uint16_t port = (uint16_t)(p1 * 256 + p2);
+
+    // 若已有数据连接或监听，先关闭，避免泄漏
+    if (client->data_fd >= 0)
+    {
+        close(client->data_fd);
+        client->data_fd = -1;
+    }
 
     // 在主动模式（PORT）中，客户端应在本地指定的IP:port上监听，等待服务器连接回连。
     int lfd = client_listen_port(ip, port);
@@ -114,6 +120,19 @@ static void client_handle_port(Client *client, char *args)
 
     client->data_mode = DATA_MODE_PORT;
     client->data_fd = lfd; // 保存监听fd，后续数据传输时需 accept
+
+    // 发送 PORT 命令给服务器，并接收响应，内部完成，不在外部暴露
+    char cmd_buf[256];
+    snprintf(cmd_buf, sizeof(cmd_buf), "PORT %s", args);
+    client_send_cmd(client->ctrl_fd, cmd_buf);
+
+    char resp[8192];
+    if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
+    {
+        ui_print_msg("Failed to receive PORT response.");
+        return;
+    }
+    ui_print_msg(resp);
 }
 
 static void client_handle_retr(Client *client, const char *args)
@@ -255,10 +274,9 @@ int client_handle_input(Client *client, const char *input)
         return 0;
     }
 
-    client_send_cmd(client->ctrl_fd, input);
-
     if (strcmp(cmd, "PASV") == 0)
     {
+        client_send_cmd(client->ctrl_fd, input);
         client_handle_pasv(client);
         return 0;
     }
@@ -269,15 +287,18 @@ int client_handle_input(Client *client, const char *input)
     }
     else if (strcmp(cmd, "RETR") == 0)
     {
+        client_send_cmd(client->ctrl_fd, input);
         client_handle_retr(client, args);
         return 0;
     }
     else if (strcmp(cmd, "STOR") == 0)
     {
+        client_send_cmd(client->ctrl_fd, input);
         return 0;
     }
     else if (strcmp(cmd, "LIST") == 0)
     {
+        client_send_cmd(client->ctrl_fd, input);
         client_handle_list(client);
         return 0;
     }
@@ -285,6 +306,7 @@ int client_handle_input(Client *client, const char *input)
     {
         // 其他一般指令
         char resp[8192];
+        client_send_cmd(client->ctrl_fd, input);
         if (client_recv_resp(client->ctrl_fd, resp, sizeof(resp)) < 0)
         {
             ui_print_msg("Failed to receive response.");
