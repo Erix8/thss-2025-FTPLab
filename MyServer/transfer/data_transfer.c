@@ -258,7 +258,8 @@ int transfer_send_list(ClientConn *conn)
     // parent
     close(pipefd[1]);
     char inbuf[8192];
-    char outbuf[16384]; // 预留 CRLF 扩展
+    char outbuf[16384];      // 预留 CRLF 扩展
+    int skip_first_line = 1; // 跳过第一行（如：total 176）
     ssize_t r;
     while ((r = read(pipefd[0], inbuf, sizeof(inbuf))) > 0)
     {
@@ -266,6 +267,17 @@ int transfer_send_list(ClientConn *conn)
         size_t oi = 0;
         for (ssize_t i = 0; i < r; ++i)
         {
+            // 先处理是否需要跳过第一行
+            if (skip_first_line)
+            {
+                if (inbuf[i] == '\n')
+                {
+                    // 到达第一行末尾，不输出该换行以及之前内容
+                    skip_first_line = 0;
+                }
+                // 无论是否为'\n'，都跳过当前字符
+                continue;
+            }
             if ((size_t)oi + 2 >= sizeof(outbuf))
             {
                 // flush
