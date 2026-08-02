@@ -1,92 +1,106 @@
-# **FTP Lab**
+# Socket Programming (FTP Client & Server)
 
-## 一、项目架构与目录结构
+A miniature **FTP server** and **FTP client** written from scratch in **C** using the **Berkeley Socket API**, running on GNU/Linux over TCP.
 
-本项目采用客户端 - 服务器（C/S）架构，基于 C 语言实现，严格遵循模块化设计原则，将网络通信、命令处理、数据传输等功能拆分为独立模块。项目目录结构如下：
+- **Server** (`MyServer/`): multi-client FTP server supporting `USER`, `PASS`, `PORT`, `PASV`, `RETR`, `STOR`, `CWD`, `PWD`, `MKD`, `RMD`, `LIST`, `SYST`, `TYPE`, `QUIT`.
+- **Client** (`MyClient/`): interactive command-line FTP client using the same command set to log in, navigate directories, and upload/download files.
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [doc/requirements.md](doc/requirements.md) | Assignment requirements (commands, CLI options, scoring, optional features) |
+| [doc/server.md](doc/server.md) | Server implementation details (event loop, commands, data transfer, path security) |
+| [doc/client.md](doc/client.md) | Client implementation details (command dispatch, I/O, UI) |
+| [doc/testing.md](doc/testing.md) | Auto-grading test scripts and what they verify |
+| [doc/design.md](doc/design.md) | Key design decisions and notable features |
+
+## Project Structure
 
 ```
-FTP项目/
-├── MyClient/                # 客户端程序
-│   ├── cmd/                 # 命令处理模块，实现命令逻辑
-│   ├── net/                 # 命令模块，控制连接建立、命令发送、响应接收
-│   ├── transfer/            # 数据传输模块，支持文件和目录传输
-│   ├── ui/                  # 界面交互模块，处理输入与打印信息
-│   ├── utils/               # 工具函数模块
-│   ├── Makefile             # 编译脚本
-│   └── main.c               # 客户端入口
+.
+├── README.md
+├── doc/                           # Detailed documentation
+│   ├── requirements.md
+│   ├── server.md
+│   ├── client.md
+│   ├── testing.md
+│   └── design.md
 │
-└── MyServer/                # 服务器程序
-    ├── config/              # 配置模块，解析命令行参数、校验配置
-    ├── conn/                # 客户端连接模块，创建、销毁及事件循环
-    ├── net/                 # 网络通信模块，监听、接受连接、数据收发
-    ├── cmd/                 # 命令处理模块，处理客户端命令并返回响应
-    ├── transfer/            # 数据传输模块，支持文件和目录传输
-    ├── utils/               # 工具函数模块
-    ├── Makefile             # 编译脚本
-    └── main.c               # 服务器入口
+├── MyClient/                      # FTP client (C)
+│   ├── main.c                     # Client entry point
+│   ├── Makefile                   # GNU Make recipe -> produces `client`
+│   ├── autograde_client.py        # Local auto-test script for the client
+│   ├── std_server.py              # Standard FTP server helper (pyftpdlib) for testing
+│   ├── cmd/                       # Command dispatch (PASV/PORT/RETR/STOR/LIST/…)
+│   ├── net/                       # Control connection, send/recv, PORT listener
+│   ├── transfer/                  # File upload/download, directory listing
+│   ├── ui/                        # Read user input, print server responses
+│   └── utils/                     # Command splitting, PORT arg parsing, -ip/-port parsing
+│
+└── MyServer/                      # FTP server (C)
+    ├── main.c                     # Server entry point
+    ├── Makefile                   # GNU Make recipe -> produces `server`
+    ├── autograde_server.py        # Local auto-test script for the server
+    ├── config/                    # Parse/validate -port and -root options
+    ├── conn/                      # Dynamic connection list + select() event loop
+    ├── net/                       # Listen/accept/send/recv/close helpers
+    ├── cmd/                       # FTP command handlers (USER…QUIT)
+    ├── transfer/                  # Data connection + file/dir transfer
+    └── utils/                     # Path joining/checking, command splitting, PORT parsing
 ```
 
-## 二、客户端模块实现
+## Build & Run
 
-### 1. 网络通信模块（net/）
+### Server
 
-- **核心功能**：负责与服务器建立和管理控制连接，发送 FTP 命令并接收响应。
-- **关键函数**：
-  - `client_connect()`：通过 TCP 协议连接服务器控制端口（默认 21），返回控制连接文件描述符。
-  - `client_send_cmd()`：自动为命令添加`\r\n`结尾并发送。
-  - `client_recv_resp()`：接收服务器响应并提取前 3 位状态码。
-  - `client_listen_port()`：在主动模式（PORT）下创建本地监听 socket，等待服务器反向连接。
+```bash
+cd MyServer
+make                          # produces ./server (compiled with -Wall -Wextra, no warnings)
+./server                      # default: port 21, root /tmp (may need sudo for port 21)
+./server -port 2121 -root /tmp/ftproot
+make clean
+```
 
-### 2. 命令处理模块（cmd/）
+### Client
 
-- **核心功能**：解析用户输入，转换为 FTP 协议命令并处理服务器响应。
-- **关键命令实现**：
-  - **PASV（被动模式）**：发送`PASV`命令后解析服务器返回的 IP 和端口，主动建立数据连接。
-  - **PORT（主动模式）**：在本地指定端口监听，通过`PORT`命令通知服务器，等待其发起数据连接。
-  - **RETR（文件下载）**：发送下载请求，通过数据连接接收文件并保存到本地。
-  - **STOR（文件上传）**：发送上传请求，通过数据连接读取本地文件并发送至服务器。
-  - **LIST（目录列表）**：获取服务器端目录内容，支持 CRLF 到 LF 的换行符转换。
+```bash
+cd MyClient
+make                          # produces ./client
+./client                      # default: 127.0.0.1:21
+./client -ip 127.0.0.1 -port 2121
+make clean
+```
 
-### 3. 数据传输模块（transfer/）
+### Example session
 
-- **核心功能**：处理文件和目录列表的数据传输细节。
-- **关键实现**：
-  - 使用 64KB 缓冲区高效读写数据，支持部分读写和信号中断重试。
-  - `transfer_recv_file()`：从数据连接接收文件并写入本地磁盘。
-  - `transfer_send_file()`：读取本地文件并通过数据连接发送至服务器。
-  - `transfer_recv_list()`：接收目录列表并标准化换行符，支持输出到终端。
+```
+$ ./client -ip 127.0.0.1 -port 2121
+220 Anonymous FTP server ready.
+USER anonymous
+331 Please specify the password.
+PASS guest@example.com
+230 Login successful.
+PASV
+227 Entering Passive Mode (127,0,0,1,199,42)
+LIST
+150 Opening data connection.
+drwxr-xr-x  2 user user 4096 … .
+drwxr-xr-x  2 user user 4096 … ..
+-rw-r--r--  1 user user 1234 … hello.txt
+226 Transfer complete.
+RETR hello.txt
+150 Opening data connection.
+226 Transfer complete.
+QUIT
+221 Goodbye.
+```
 
-## 三、服务器模块实现
+## Highlights
 
-### 1. 网络通信模块（net/）
-
-- **核心功能**：创建监听 socket，接受客户端连接，处理数据收发。
-- **关键函数**：
-  - `socket_create_listen()`：创建并绑定监听 socket，支持端口复用（`SO_REUSEADDR`）。
-  - `socket_accept()`：接受客户端控制连接，返回控制连接文件描述符并记录客户端 IP 和端口。
-  - `socket_send()`/`socket_recv()`：发送响应和接收命令。
-
-### 2. 连接管理模块（conn/）
-
-- **核心功能**：基于`select`实现多客户端并发处理，维护客户端连接状态。
-- **关键实现**：
-  - `client_conn_list`：动态管理客户端连接列表，支持扩容 / 缩容和空闲槽位复用。
-  - `conn_manager_run()`：主事件循环，通过`select`监听监听 socket 和客户端连接的可读事件。
-  - `handle_client_cmd()`：读取客户端命令并分发至命令处理模块，处理连接断开和退出逻辑。
-
-### 3. 命令处理模块（cmd/）
-
-- **核心功能**：解析客户端命令并执行对应操作（如认证、文件操作、目录切换）。
-- **关键实现**：
-  - 处理`USER`/`PASS`命令完成认证，支持匿名登录。
-  - 响应`RETR`/`STOR`命令时建立数据连接，传输文件数据。
-  - 处理`LIST`命令时生成目录列表并通过数据连接发送。
-
-## 四、总结
-
-本项目通过模块化设计实现了 FTP 协议的核心功能，客户端与服务器分别负责命令交互和数据传输的不同环节：
-
-- 客户端专注于用户命令解析、数据连接建立和文件读写；
-- 服务器专注于连接管理、命令执行和资源访问控制。
-
-系统支持主动 / 被动两种数据传输模式，可稳定实现文件上传、下载和目录浏览。
+- **Multi-client** via a `select()`-based event loop (no busy-waiting).
+- **Non-blocking transfers**: each `RETR`/`STOR`/`LIST` runs in a detached pthread.
+- **Path traversal protection** (`..` escapes rejected) on all file/directory commands.
+- **PORT and PASV** data connection modes, with one-time-use data connections per RFC 959.
+- Streams large files (~1 GB) in fixed-size chunks; all responses use RFC-style `\r\n`.
+- Clean standard output/error (all debug prints suppressed).
