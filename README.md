@@ -12,7 +12,7 @@ A miniature **FTP server** and **FTP client** written from scratch in **C** usin
 | [doc/requirements.md](doc/requirements.md) | Assignment requirements (commands, CLI options, scoring, optional features) |
 | [doc/server.md](doc/server.md) | Server implementation details (event loop, commands, data transfer, path security) |
 | [doc/client.md](doc/client.md) | Client implementation details (command dispatch, I/O, UI) |
-| [doc/testing.md](doc/testing.md) | Auto-grading test scripts and what they verify |
+| [doc/testing.md](doc/testing.md) | How to run the local auto-grading scripts and manually verify the private scoring points |
 | [doc/design.md](doc/design.md) | Key design decisions and notable features |
 
 ## Project Structure
@@ -32,6 +32,7 @@ A miniature **FTP server** and **FTP client** written from scratch in **C** usin
 │   ├── Makefile                   # GNU Make recipe -> produces `client`
 │   ├── autograde_client.py        # Local auto-test script for the client
 │   ├── std_server.py              # Standard FTP server helper (pyftpdlib) for testing
+│   ├── requirements.txt           # pyftpdlib dependency for std_server.py
 │   ├── cmd/                       # Command dispatch (PASV/PORT/RETR/STOR/LIST/…)
 │   ├── net/                       # Control connection, send/recv, PORT listener
 │   ├── transfer/                  # File upload/download, directory listing
@@ -95,6 +96,23 @@ RETR hello.txt
 QUIT
 221 Goodbye.
 ```
+
+## Testing
+
+Two kinds of testing are covered in [doc/testing.md](doc/testing.md): running the provided auto-grading scripts that mirror the public test cases, and manually verifying the private scoring points that the scripts do not cover.
+
+```bash
+# Server public autograde (needs sudo for default port 21)
+cd MyServer
+python3 autograde_server.py
+
+# Client public autograde (needs pyftpdlib)
+pip install -r MyClient/requirements.txt
+cd ../MyClient
+python3 autograde_client.py
+```
+
+The manual private-test checklist (both data modes, directory operations, path-traversal rejection, invalid-input error codes, ~1 GB transfers, CLI defaults, standard-server compatibility, etc.) is in the **Private Test Cases** section of [doc/testing.md](doc/testing.md).
 
 ## Highlights
 
